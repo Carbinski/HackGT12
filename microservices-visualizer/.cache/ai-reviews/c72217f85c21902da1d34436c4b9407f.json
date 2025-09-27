@@ -1,0 +1,191 @@
+{
+  "summary": "Analyzed 18 resources and 14 relationships. Identified 12 improvement opportunities across reliability, cost, and operations.",
+  "findings": [
+    {
+      "id": "lambda-mem-not-set-multirepo__UserServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda memorySize not explicitly set",
+      "details": "Set an appropriate memorySize to control performance/cost and predictable cold-starts. Consider 256\u20131024MB depending on workload; benchmark with Lambda Power Tuning.",
+      "nodes": [
+        "multirepo__UserServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/operatorguide/computing-power.html",
+        "https://github.com/alexcasalboni/aws-lambda-power-tuning"
+      ]
+    },
+    {
+      "id": "lambda-timeout-not-set-multirepo__UserServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda timeout not explicitly set",
+      "details": "Set a timeout aligned with upstream timeouts and idempotency strategy. Avoid long timeouts for API-facing Lambdas; consider retries and DLQs.",
+      "nodes": [
+        "multirepo__UserServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-common.html"
+      ]
+    },
+    {
+      "id": "lambda-mem-not-set-multirepo__ProductServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda memorySize not explicitly set",
+      "details": "Set an appropriate memorySize to control performance/cost and predictable cold-starts. Consider 256\u20131024MB depending on workload; benchmark with Lambda Power Tuning.",
+      "nodes": [
+        "multirepo__ProductServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/operatorguide/computing-power.html",
+        "https://github.com/alexcasalboni/aws-lambda-power-tuning"
+      ]
+    },
+    {
+      "id": "lambda-timeout-not-set-multirepo__ProductServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda timeout not explicitly set",
+      "details": "Set a timeout aligned with upstream timeouts and idempotency strategy. Avoid long timeouts for API-facing Lambdas; consider retries and DLQs.",
+      "nodes": [
+        "multirepo__ProductServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-common.html"
+      ]
+    },
+    {
+      "id": "lambda-mem-not-set-multirepo__OrderServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda memorySize not explicitly set",
+      "details": "Set an appropriate memorySize to control performance/cost and predictable cold-starts. Consider 256\u20131024MB depending on workload; benchmark with Lambda Power Tuning.",
+      "nodes": [
+        "multirepo__OrderServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/operatorguide/computing-power.html",
+        "https://github.com/alexcasalboni/aws-lambda-power-tuning"
+      ]
+    },
+    {
+      "id": "lambda-timeout-not-set-multirepo__OrderServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda timeout not explicitly set",
+      "details": "Set a timeout aligned with upstream timeouts and idempotency strategy. Avoid long timeouts for API-facing Lambdas; consider retries and DLQs.",
+      "nodes": [
+        "multirepo__OrderServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-common.html"
+      ]
+    },
+    {
+      "id": "lambda-mem-not-set-multirepo__PaymentServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda memorySize not explicitly set",
+      "details": "Set an appropriate memorySize to control performance/cost and predictable cold-starts. Consider 256\u20131024MB depending on workload; benchmark with Lambda Power Tuning.",
+      "nodes": [
+        "multirepo__PaymentServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/operatorguide/computing-power.html",
+        "https://github.com/alexcasalboni/aws-lambda-power-tuning"
+      ]
+    },
+    {
+      "id": "lambda-timeout-not-set-multirepo__PaymentServiceStack",
+      "severity": "low",
+      "category": "operability",
+      "message": "Lambda timeout not explicitly set",
+      "details": "Set a timeout aligned with upstream timeouts and idempotency strategy. Avoid long timeouts for API-facing Lambdas; consider retries and DLQs.",
+      "nodes": [
+        "multirepo__PaymentServiceStack"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/lambda/latest/dg/configuration-function-common.html"
+      ]
+    },
+    {
+      "id": "apigw-lambda-timeout-bound-multirepo__ProductFunction",
+      "severity": "medium",
+      "category": "reliability",
+      "message": "API Gateway \u2192 Lambda near/over 29s timeout limit",
+      "details": "API Gateway imposes a ~29s integration timeout. For synchronous invocations, ensure the Lambda timeout is below this and that the handler completes well within bounds, or adopt async patterns (SQS/EventBridge).",
+      "nodes": [
+        "multirepo__ProductApi",
+        "multirepo__ProductFunction"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html"
+      ]
+    },
+    {
+      "id": "apigw-lambda-timeout-bound-multirepo__GatewayFunction",
+      "severity": "medium",
+      "category": "reliability",
+      "message": "API Gateway \u2192 Lambda near/over 29s timeout limit",
+      "details": "API Gateway imposes a ~29s integration timeout. For synchronous invocations, ensure the Lambda timeout is below this and that the handler completes well within bounds, or adopt async patterns (SQS/EventBridge).",
+      "nodes": [
+        "multirepo__MainApi",
+        "multirepo__GatewayFunction"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html"
+      ]
+    },
+    {
+      "id": "apigw-lambda-timeout-bound-multirepo__OrdersFn",
+      "severity": "medium",
+      "category": "reliability",
+      "message": "API Gateway \u2192 Lambda near/over 29s timeout limit",
+      "details": "API Gateway imposes a ~29s integration timeout. For synchronous invocations, ensure the Lambda timeout is below this and that the handler completes well within bounds, or adopt async patterns (SQS/EventBridge).",
+      "nodes": [
+        "multirepo__OrdersApi",
+        "multirepo__OrdersFn"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html"
+      ]
+    },
+    {
+      "id": "apigw-lambda-timeout-bound-multirepo__UserFunction",
+      "severity": "medium",
+      "category": "reliability",
+      "message": "API Gateway \u2192 Lambda near/over 29s timeout limit",
+      "details": "API Gateway imposes a ~29s integration timeout. For synchronous invocations, ensure the Lambda timeout is below this and that the handler completes well within bounds, or adopt async patterns (SQS/EventBridge).",
+      "nodes": [
+        "multirepo__UserApi",
+        "multirepo__UserFunction"
+      ],
+      "edges": [],
+      "references": [
+        "https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html"
+      ]
+    }
+  ],
+  "recommendations": [
+    "Review IAM policies for least privilege; avoid overly broad actions like '*'.",
+    "Enable structured logging and tracing (X-Ray), ship logs to a central sink, set concurrency limits if needed.",
+    "Enable request validation, auth (Cognito/JWT), throttling, and meaningful error mappings in API Gateway."
+  ],
+  "meta": {
+    "source": "heuristic_reviewer",
+    "generated_at": "2025-09-27T15:03:26.681534Z",
+    "fallback_reason": "AI failed: AI call failed: Expecting value: line 1 column 1 (char 0)"
+  }
+}

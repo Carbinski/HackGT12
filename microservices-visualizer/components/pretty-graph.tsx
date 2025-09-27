@@ -22,6 +22,8 @@ interface PrettyGraphProps {
   connections: ServiceConnection[]
   onNodeSelect?: (node: MicroserviceNode | null) => void
   runId?: number
+  onRunComplete?: () => void
+  highlightedNodeIds?: string[]
 }
 
 // Service type colors based on AWS architecture patterns
@@ -142,7 +144,7 @@ function getServiceType(node: MicroserviceNode): string {
   return "compute" // Default to compute layer
 }
 
-export function PrettyGraph({ services, connections, onNodeSelect, runId }: PrettyGraphProps) {
+export function PrettyGraph({ services, connections, onNodeSelect, runId, onRunComplete, highlightedNodeIds }: PrettyGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null)
@@ -155,6 +157,7 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
   const nodeSelRef = useRef<any>(null)
   const isAnimatingRef = useRef<boolean>(false)
   const gsapTweensRef = useRef<any[]>([])
+  const lastHighlightRef = useRef<string[]>([])
 
   // Keep ref in sync without reinitializing the graph
   useEffect(() => {
@@ -759,6 +762,95 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
     }
   }, [services, connections, onNodeSelect])
 
+  // External highlight of nodes from sidebar findings
+  useEffect(() => {
+    if (!nodeSelRef.current || !linkSelRef.current) return
+    const nodeSel = nodeSelRef.current
+    const linkSel = linkSelRef.current
+    const ids = new Set(highlightedNodeIds || [])
+    const prev = lastHighlightRef.current
+    const isSame = prev.length === ids.size && prev.every(id => ids.has(id))
+    if (isSame) return
+
+    // Reset if none
+    if (ids.size === 0) {
+      if (prev.length === 0) return
+      try {
+        nodeSel.selectAll('rect')
+          .attr('stroke-width', 3)
+          .attr('stroke', (d: any) => {
+            const serviceType = getServiceType(d as MicroserviceNode)
+            return SERVICE_COLORS[serviceType as keyof typeof SERVICE_COLORS] || '#6b7280'
+          })
+        linkSel
+          .attr('stroke', (l: any) => {
+            const connectionColors: Record<string, string> = {
+              'http': '#3b82f6', 'grpc': '#8b5cf6', 'message': '#f59e0b', 'event': '#10b981',
+              'database': '#ef4444', 'cache': '#06b6d4', 'invoke': '#84cc16', 'stream': '#f472b6',
+              'sync': '#64748b', 'async': '#f59e0b'
+            }
+            return connectionColors[l.type] || '#64748b'
+          })
+          .attr('stroke-width', (l: any) => {
+            const asyncConnections = ['message', 'event', 'async', 'stream']
+            return asyncConnections.includes(l.type) ? 3 : 2
+          })
+      } catch {}
+      lastHighlightRef.current = []
+      return
+    }
+
+    // Highlight matching nodes and connecting edges
+    try {
+      nodeSel.selectAll('rect')
+        .attr('stroke-width', (d: any) => ids.has(d.id) ? 5 : 3)
+        .attr('stroke', (d: any) => ids.has(d.id) ? '#ef4444' : (() => {
+          const serviceType = getServiceType(d as MicroserviceNode)
+          return SERVICE_COLORS[serviceType as keyof typeof SERVICE_COLORS] || '#6b7280'
+        })())
+
+      linkSel
+        .attr('stroke', (l: any) => (ids.has(l.source.id) || ids.has(l.target.id)) ? '#ef4444' : ((): string => {
+          const connectionColors: Record<string, string> = {
+            'http': '#3b82f6', 'grpc': '#8b5cf6', 'message': '#f59e0b', 'event': '#10b981',
+            'database': '#ef4444', 'cache': '#06b6d4', 'invoke': '#84cc16', 'stream': '#f472b6',
+            'sync': '#64748b', 'async': '#f59e0b'
+          }
+          return connectionColors[l.type] || '#64748b'
+        })())
+        .attr('stroke-width', (l: any) => {
+          const asyncTypes = ['message', 'event', 'async', 'stream']
+          const base = asyncTypes.includes(l.type) ? 3 : 2
+          return (ids.has(l.source.id) || ids.has(l.target.id)) ? base + 1 : base
+        })
+        .attr('stroke-opacity', (l: any) => (ids.has(l.source.id) || ids.has(l.target.id)) ? 0.9 : 0.7)
+
+      // Auto-focus to highlighted nodes
+      const nodes = nodesRef.current
+      const targets = nodes.filter(n => ids.has(n.id))
+      if (targets.length > 0 && svgRef.current && containerRef.current) {
+        const minX = Math.min(...targets.map(n => n.x || 0))
+        const maxX = Math.max(...targets.map(n => n.x || 0))
+        const minY = Math.min(...targets.map(n => n.y || 0))
+        const maxY = Math.max(...targets.map(n => n.y || 0))
+        const padding = 80
+        const bounds = { x: minX - padding, y: minY - padding, width: (maxX - minX) + 2*padding, height: (maxY - minY) + 2*padding }
+        const width = 800, height = 600
+        const scale = Math.min(width / bounds.width, height / bounds.height) * 0.9
+        const clamped = Math.max(0.4, Math.min(1.5, scale))
+        const translateX = (width - bounds.width * clamped) / 2 - bounds.x * clamped
+        const translateY = (height - bounds.height * clamped) / 2 - bounds.y * clamped
+        const zb = zoomBehaviorRef.current
+        if (zb) {
+          const svg = select(svgRef.current)
+          svg.transition().duration(350).call(zb.transform, zoomIdentity.translate(translateX, translateY).scale(clamped))
+        }
+      }
+    } catch {}
+
+    lastHighlightRef.current = Array.from(ids)
+  }, [highlightedNodeIds])
+
   // Run animation effect (GSAP sequential timeline)
   useEffect(() => {
     if (!svgRef.current) return
@@ -989,8 +1081,9 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
         .attr("marker-end", "url(#arrowhead)")
       nodeSel.style("opacity", 1)
       isAnimatingRef.current = false
+      try { onRunComplete && onRunComplete() } catch {}
     })()
-
+      
     return () => {
       gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
       gsapTweensRef.current = []
@@ -999,6 +1092,7 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
         container.selectAll("mask[id^='lineMask_']").remove()
       } catch {}
       isAnimatingRef.current = false
+      try { onRunComplete && onRunComplete() } catch {}
     }
   }, [runId])
 
