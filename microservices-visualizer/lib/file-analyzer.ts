@@ -1,7 +1,7 @@
 export interface MicroserviceNode {
   id: string
   name: string
-  type: "api" | "frontend" | "database" | "queue" | "cache" | "external"
+  type: "api" | "frontend" | "database" | "queue" | "cache" | "external" | "compute" | "storage" | "message" | "stepfn" | "monitoring" | "security"
   path: string
   dependencies: string[]
   endpoints?: string[]
@@ -13,7 +13,7 @@ export interface MicroserviceNode {
 export interface ServiceConnection {
   from: string
   to: string
-  type: "http" | "grpc" | "message" | "database" | "cache"
+  type: "http" | "grpc" | "message" | "database" | "cache" | "event" | "invoke" | "stream" | "sync" | "async"
   method?: string
   endpoint?: string
 }
