@@ -7,30 +7,31 @@ import { Badge } from "@/components/ui/badge"
 import { PrettyGraph } from "@/components/pretty-graph"
 import { FolderSelector } from "@/components/folder-selector"
 import { ServiceDetails } from "@/components/service-details"
+import { CodeSnippet } from "@/components/code-snippet"
+import { FullCdkGenerator } from "@/components/full-cdk-generator"
 import { loadGraphFromFile, mapAiGraphToUiFormat } from "@/lib/graph-mapper"
 import type { MicroserviceNode, ServiceConnection } from "@/lib/file-analyzer"
 import { 
-  Database, 
-  Zap, 
-  Cloud, 
-  MessageSquare, 
-  Globe, 
-  Workflow,
+  Cloud,
   Download,
   RotateCcw,
   ChevronLeft,
   ChevronRight,
-  Play
+  Play,
+  Link,
+  ArrowRight,
+  Zap,
+  Database,
+  MessageSquare,
+  Globe
 } from "lucide-react"
 
 // Available AWS service types for quick add
 const AWS_SERVICES = [
-  { type: "Lambda", icon: Zap, color: "bg-orange-500", label: "Lambda Function" },
-  { type: "Table", icon: Database, color: "bg-blue-500", label: "DynamoDB Table" },
-  { type: "Queue", icon: MessageSquare, color: "bg-purple-500", label: "SQS Queue" },
-  { type: "Topic", icon: MessageSquare, color: "bg-pink-500", label: "SNS Topic" },
-  { type: "ApiGateway", icon: Globe, color: "bg-green-500", label: "API Gateway" },
-  { type: "StepFn", icon: Workflow, color: "bg-indigo-500", label: "Step Functions" },
+  { type: "Lambda", icon: "/aws-icons/Arch_AWS-Lambda_64.svg", color: "bg-orange-500", label: "Lambda Function" },
+  { type: "Table", icon: "/aws-icons/Arch_Amazon-DynamoDB_64.svg", color: "bg-blue-500", label: "DynamoDB Table" },
+  { type: "Queue", icon: "/aws-icons/Arch_Amazon-EventBridge_64.svg", color: "bg-purple-500", label: "SQS Queue" },
+  { type: "ApiGateway", icon: "/aws-icons/Arch_Amazon-API-Gateway_64.svg", color: "bg-green-500", label: "API Gateway" },
 ]
 
 export default function HomePage() {
@@ -52,9 +53,34 @@ export default function HomePage() {
     startWidth: 400
   })
   const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(false)
-  const [rightSidebarContent, setRightSidebarContent] = useState<'service' | 'ai-review'>('service')
+  const [rightSidebarContent, setRightSidebarContent] = useState<'service' | 'ai-review' | 'code-snippet' | 'full-cdk'>('service')
   const [graphVersion, setGraphVersion] = useState<number>(0)
   const [isGraphLoading, setIsGraphLoading] = useState<boolean>(false)
+  const [selectedServiceType, setSelectedServiceType] = useState<string | null>(null)
+  const [currentConfig, setCurrentConfig] = useState<any>(null)
+
+  const handleServiceUpdate = (updatedNode: MicroserviceNode) => {
+    setServices(prev => prev.map(service => 
+      service.id === updatedNode.id ? updatedNode : service
+    ))
+    // Update the selected node if it's the one being updated
+    if (selectedNode && selectedNode.id === updatedNode.id) {
+      setSelectedNode(updatedNode)
+    }
+    setGraphVersion(v => v + 1)
+  }
+
+  const addConnection = (fromServiceId: string, toServiceId: string, connectionType: string = "http") => {
+    const newConnection: ServiceConnection = {
+      from: fromServiceId,
+      to: toServiceId,
+      type: connectionType as ServiceConnection["type"],
+      method: "GET",
+      endpoint: "/api"
+    }
+    setConnections(prev => [...prev, newConnection])
+    setGraphVersion(v => v + 1)
+  }
 
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
@@ -165,7 +191,7 @@ export default function HomePage() {
           const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(latest.graph)
           setServices(mappedServices)
           setConnections(mappedConnections)
-          setGraphVersion(v => v + 1)
+          setGraphVersion((v: number) => v + 1)
           if (latest.cacheKey) {
             console.log('🔑 Setting review cache key:', latest.cacheKey)
             setReviewCacheKey(latest.cacheKey)
@@ -206,6 +232,11 @@ export default function HomePage() {
       description: `AWS ${serviceType} service`
     }
     setServices(prev => [...prev, newService])
+    
+    // Show code snippet for the service
+    setSelectedServiceType(serviceType)
+    setRightSidebarContent('code-snippet')
+    setRightSidebarOpen(true)
   }
 
   const exportGraph = () => {
@@ -269,7 +300,11 @@ export default function HomePage() {
                 className="w-full justify-start"
                 onClick={() => addService(service.type)}
               >
-                <service.icon className={`h-4 w-4 mr-2 text-white rounded p-0.5 ${service.color}`} />
+                <img 
+                  src={service.icon} 
+                  alt={service.label}
+                  className="h-4 w-4 mr-2 rounded"
+                />
                 {service.label}
               </Button>
             ))}
@@ -304,8 +339,20 @@ export default function HomePage() {
                 className="w-full"
                 variant="default"
               >
-                <Zap className="h-4 w-4 mr-2" />
+                <Play className="h-4 w-4 mr-2" />
                 Load Graph
+              </Button>
+              
+              <Button
+                onClick={() => {
+                  setRightSidebarContent('full-cdk')
+                  setRightSidebarOpen(true)
+                }}
+                className="w-full bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white border-0 shadow-lg"
+                disabled={services.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Generate Full CDK Stack
               </Button>
           
           {/* CDK Folder Scanner */}
@@ -498,7 +545,9 @@ export default function HomePage() {
           {/* Close button */}
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">
-              {rightSidebarContent === 'service' ? 'Service Details' : 'AI Review'}
+              {rightSidebarContent === 'service' ? 'Service Details' : 
+               rightSidebarContent === 'code-snippet' ? 'Code Snippet' : 
+               rightSidebarContent === 'full-cdk' ? 'Full CDK Stack' : 'AI Review'}
             </h3>
             <Button
               variant="ghost"
@@ -510,9 +559,163 @@ export default function HomePage() {
             </Button>
           </div>
 
+          {/* Navigation buttons for service-related content */}
+          {selectedNode && (rightSidebarContent === 'service' || rightSidebarContent === 'code-snippet') && (
+            <div className="flex gap-2">
+              <Button
+                variant={rightSidebarContent === 'service' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setRightSidebarContent('service')}
+                className="flex-1"
+              >
+                Details
+              </Button>
+              <Button
+                variant={rightSidebarContent === 'code-snippet' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setSelectedServiceType(selectedNode.technologies[0] || 'Lambda')
+                  setRightSidebarContent('code-snippet')
+                }}
+                className="flex-1"
+              >
+                Code
+              </Button>
+            </div>
+          )}
+
+          {/* Quick Connection Creation */}
+          {selectedNode && rightSidebarContent === 'service' && services.length > 1 && (
+            <div className="space-y-3 p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2">
+                <Link className="h-4 w-4 text-blue-600" />
+                <h4 className="text-sm font-semibold text-blue-900">Connect to Other Services</h4>
+              </div>
+              <p className="text-xs text-blue-700">Click to create connections between your services</p>
+              
+              <div className="space-y-2">
+                {services
+                  .filter(service => service.id !== selectedNode.id)
+                  .slice(0, 6)
+                  .map(service => {
+                    const connectionType = 
+                      selectedNode.technologies[0] === "ApiGateway" && service.technologies[0] === "Lambda" ? "http" :
+                      selectedNode.technologies[0] === "Lambda" && service.technologies[0] === "Table" ? "database" :
+                      selectedNode.technologies[0] === "Lambda" && service.technologies[0] === "Queue" ? "message" : "http"
+                    
+                    const getConnectionIcon = (type: string) => {
+                      switch (type) {
+                        case "http": return <Globe className="h-3 w-3" />
+                        case "database": return <Database className="h-3 w-3" />
+                        case "message": return <MessageSquare className="h-3 w-3" />
+                        default: return <Zap className="h-3 w-3" />
+                      }
+                    }
+                    
+                    const getConnectionColor = (type: string) => {
+                      switch (type) {
+                        case "http": return "border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800"
+                        case "database": return "border-green-200 bg-green-50 hover:bg-green-100 text-green-800"
+                        case "message": return "border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-800"
+                        default: return "border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800"
+                      }
+                    }
+                    
+                    const getConnectionLabel = (type: string) => {
+                      switch (type) {
+                        case "http": return "HTTP API"
+                        case "database": return "Database"
+                        case "message": return "Message Queue"
+                        default: return "Connection"
+                      }
+                    }
+                    
+                    const isAlreadyConnected = connections.some(conn => 
+                      (conn.from === selectedNode.id && conn.to === service.id) ||
+                      (conn.from === service.id && conn.to === selectedNode.id)
+                    )
+                    
+                    return (
+                      <button
+                        key={service.id}
+                        onClick={() => !isAlreadyConnected && addConnection(selectedNode.id, service.id, connectionType)}
+                        disabled={isAlreadyConnected}
+                        className={`w-full flex items-center justify-between p-2 rounded-md border transition-all duration-200 ${
+                          isAlreadyConnected 
+                            ? "border-green-300 bg-green-50 text-green-700 cursor-not-allowed opacity-75" 
+                            : getConnectionColor(connectionType)
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <img 
+                            src={`/aws-icons/Arch_${service.technologies[0] === "Lambda" ? "AWS-Lambda" : 
+                                   service.technologies[0] === "Table" ? "Amazon-DynamoDB" :
+                                   service.technologies[0] === "Queue" ? "Amazon-EventBridge" :
+                                   "Amazon-API-Gateway"}_64.svg`}
+                            alt={service.technologies[0]}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm font-medium">{service.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {isAlreadyConnected ? (
+                            <>
+                              <span className="text-xs opacity-75">Connected</span>
+                              <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-xs opacity-75">{getConnectionLabel(connectionType)}</span>
+                              {getConnectionIcon(connectionType)}
+                              <ArrowRight className="h-3 w-3" />
+                            </>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+              </div>
+              
+              {services.filter(service => service.id !== selectedNode.id).length > 6 && (
+                <p className="text-xs text-blue-600 text-center">
+                  +{services.filter(service => service.id !== selectedNode.id).length - 6} more services
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Service Details Content */}
           {rightSidebarContent === 'service' && (
-            <ServiceDetails selectedNode={selectedNode} connections={connections} />
+            <ServiceDetails 
+              selectedNode={selectedNode} 
+              connections={connections} 
+              onConfigChange={setCurrentConfig}
+              onServiceUpdate={handleServiceUpdate}
+            />
+          )}
+
+          {/* Code Snippet Content */}
+          {rightSidebarContent === 'code-snippet' && selectedServiceType && currentConfig && (
+            <CodeSnippet 
+              serviceType={selectedServiceType} 
+              serviceName={currentConfig.serviceName || selectedNode?.name || `my-${selectedServiceType.toLowerCase()}`}
+              runtime={currentConfig.runtime}
+              memoryMb={currentConfig.memoryMb}
+              timeoutSec={currentConfig.timeoutSec}
+              routePath={currentConfig.routePath}
+              routeMethod={currentConfig.routeMethod}
+              tableName={currentConfig.tableName}
+              billingMode={currentConfig.billingMode}
+              visibilityTimeoutSec={currentConfig.visibilityTimeoutSec}
+              messageRetentionSec={currentConfig.messageRetentionSec}
+              fifoQueue={currentConfig.fifoQueue}
+              contentBasedDeduplication={currentConfig.contentBasedDeduplication}
+            />
+          )}
+
+          {/* Full CDK Stack Content */}
+          {rightSidebarContent === 'full-cdk' && (
+            <FullCdkGenerator services={services} connections={connections} />
           )}
 
           {/* AI Review Content */}
@@ -730,61 +933,3 @@ export default function HomePage() {
     </div>
   )
 }
-  const loadAiGraph = async () => {
-    const recordId = crypto.randomUUID()
-    try {
-      console.log('📥 loadAiGraph start', {
-        recordId,
-        runId,
-        graphVersion,
-        servicesCount: services.length,
-        connectionsCount: connections.length,
-        reviewCacheKey
-      })
-      setIsGraphLoading(true)
-      console.log('Loading latest cached graph...')
-      const res = await fetch('/api/cdk-scan-files/latest')
-      if (res.ok) {
-        const latest = await res.json()
-        if (latest?.graph) {
-          const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(latest.graph)
-          setServices(mappedServices)
-          setConnections(mappedConnections)
-          setGraphVersion(v => v + 1)
-          console.log('📥 loadAiGraph cached result', {
-            recordId,
-            servicesCount: mappedServices.length,
-            connectionsCount: mappedConnections.length,
-            cacheKey: latest.cacheKey
-          })
-          if (latest.cacheKey) {
-            console.log('🔑 Setting review cache key:', latest.cacheKey)
-            setReviewCacheKey(latest.cacheKey)
-          }
-          return
-        }
-      }
-      // Fallback to bundled sample if no cache
-      console.log('No cached graph found. Falling back to sample file.', { recordId })
-      const aiGraph = await loadGraphFromFile('/graph_v4_final.json')
-      const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(aiGraph)
-      setServices(mappedServices)
-      setConnections(mappedConnections)
-      setGraphVersion(v => v + 1)
-      console.log('📥 loadAiGraph fallback result', {
-        recordId,
-        servicesCount: mappedServices.length,
-        connectionsCount: mappedConnections.length
-      })
-    } catch (error) {
-      console.error('Failed to load AI graph:', error)
-      if (error instanceof Error) {
-        alert(`❌ Failed to load graph: ${error.message}\n\nMake sure the app is running on the correct port and try refreshing the page.`)
-      } else {
-        alert('❌ Failed to load graph. Check console for details.')
-      }
-    } finally {
-      setIsGraphLoading(false)
-      console.log('📥 loadAiGraph end', { recordId })
-    }
-  }

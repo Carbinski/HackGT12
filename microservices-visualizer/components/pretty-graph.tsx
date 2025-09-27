@@ -432,10 +432,10 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId, onRunC
           "queue": "/aws-icons/Arch_Amazon-EventBridge_64.svg",
           "message": "/aws-icons/Arch_Amazon-EventBridge_64.svg",
           "stepfn": "/aws-icons/Arch_AWS-Step-Functions_64.svg",
-          "cache": "/aws-icons/Arch_Amazon-DynamoDB_64.svg", // Use DynamoDB icon for cache
-          "storage": "/aws-icons/Arch_Amazon-DynamoDB_64.svg", // Use DynamoDB icon for storage
-          "monitoring": "/aws-icons/Arch_Amazon-DynamoDB_64.svg", // Use DynamoDB icon for monitoring
-          "security": "/aws-icons/Arch_Amazon-DynamoDB_64.svg", // Use DynamoDB icon for security
+          "cache": "/aws-icons/Arch_Amazon-ElastiCache_64.svg",
+          "storage": "/aws-icons/Arch_Amazon-S3-on-Outposts_64.svg",
+          "monitoring": "/aws-icons/Arch_Amazon-CloudWatch_64.svg",
+          "security": "/aws-icons/Arch_Amazon-Cognito_64.svg",
           "external": "/aws-icons/Arch_AWS-Lambda_64.svg"
         }
         

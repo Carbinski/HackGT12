@@ -9,9 +9,11 @@ import { Server, Database, Globe, MessageSquare, Zap, ExternalLink } from "lucid
 interface ServiceDetailsProps {
   selectedNode: MicroserviceNode | null
   connections: ServiceConnection[]
+  onConfigChange?: (config: any) => void
+  onServiceUpdate?: (updatedNode: MicroserviceNode) => void
 }
 
-export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProps) {
+export function ServiceDetails({ selectedNode, connections, onConfigChange, onServiceUpdate }: ServiceDetailsProps) {
   if (!selectedNode) {
     return (
       <Card>
@@ -45,6 +47,7 @@ export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProp
   const outgoingConnections = connections.filter((conn) => conn.from === selectedNode.id)
 
   // Local editable config state (not yet persisted)
+  const [serviceName, setServiceName] = React.useState<string>(selectedNode.name || "")
   const [runtime, setRuntime] = React.useState<string>(selectedNode.runtime || "nodejs")
   const [memoryMb, setMemoryMb] = React.useState<number>(selectedNode.memoryMb ?? 512)
   const [timeoutSec, setTimeoutSec] = React.useState<number>(selectedNode.timeoutSec ?? 30)
@@ -53,9 +56,18 @@ export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProp
   const defaultMethod = (incomingConnections.concat(outgoingConnections).find(c => !!c.method)?.method || "GET").toUpperCase()
   const [routePath, setRoutePath] = React.useState<string>(defaultRoute)
   const [routeMethod, setRouteMethod] = React.useState<string>(defaultMethod)
+  // DynamoDB config
+  const [tableName, setTableName] = React.useState<string>(selectedNode.tableName || "")
+  const [billingMode, setBillingMode] = React.useState<string>(selectedNode.billingMode || "PAY_PER_REQUEST")
+  // SQS config
+  const [visibilityTimeoutSec, setVisibilityTimeoutSec] = React.useState<number>(selectedNode.visibilityTimeoutSec ?? 30)
+  const [messageRetentionSec, setMessageRetentionSec] = React.useState<number>(selectedNode.messageRetentionSec ?? 345600)
+  const [fifoQueue, setFifoQueue] = React.useState<boolean>(selectedNode.fifoQueue ?? false)
+  const [contentBasedDeduplication, setContentBasedDeduplication] = React.useState<boolean>(selectedNode.contentBasedDeduplication ?? false)
 
   // Reset when selection changes
   React.useEffect(() => {
+    setServiceName(selectedNode.name || "")
     // Derive light defaults from technologies/description if present
     const techs = selectedNode.technologies?.map(t => t.toLowerCase()) || []
     if (selectedNode.runtime) setRuntime(selectedNode.runtime)
@@ -70,8 +82,49 @@ export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProp
     setRoutePath((selectedNode.endpoints && selectedNode.endpoints[0]) || "/")
     const connWithMethod = outgoingConnections.find(c => !!c.method) || incomingConnections.find(c => !!c.method)
     setRouteMethod((connWithMethod?.method || "GET").toUpperCase())
+    
+    // Reset DynamoDB config
+    setTableName(selectedNode.tableName || "")
+    setBillingMode(selectedNode.billingMode || "PAY_PER_REQUEST")
+    
+    // Reset SQS config
+    setVisibilityTimeoutSec(selectedNode.visibilityTimeoutSec ?? 30)
+    setMessageRetentionSec(selectedNode.messageRetentionSec ?? 345600)
+    setFifoQueue(selectedNode.fifoQueue ?? false)
+    setContentBasedDeduplication(selectedNode.contentBasedDeduplication ?? false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNode.id])
+
+  // Handle service name changes
+  const handleNameChange = (newName: string) => {
+    setServiceName(newName)
+    if (onServiceUpdate) {
+      onServiceUpdate({
+        ...selectedNode,
+        name: newName
+      })
+    }
+  }
+
+  // Notify parent of configuration changes
+  React.useEffect(() => {
+    if (onConfigChange) {
+      onConfigChange({
+        serviceName,
+        runtime,
+        memoryMb,
+        timeoutSec,
+        routePath,
+        routeMethod,
+        tableName,
+        billingMode,
+        visibilityTimeoutSec,
+        messageRetentionSec,
+        fifoQueue,
+        contentBasedDeduplication
+      })
+    }
+  }, [serviceName, runtime, memoryMb, timeoutSec, routePath, routeMethod, tableName, billingMode, visibilityTimeoutSec, messageRetentionSec, fifoQueue, contentBasedDeduplication, onConfigChange])
 
   return (
     <Card>
@@ -86,6 +139,16 @@ export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProp
         <div>
           <h4 className="text-sm font-medium mb-2">Service Information</h4>
           <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="col-span-2">
+              <label className="text-muted-foreground">Name:</label>
+              <input
+                type="text"
+                value={serviceName}
+                onChange={(e) => handleNameChange(e.target.value)}
+                className="w-full border rounded-md px-2 py-1 text-sm mt-1"
+                placeholder="Service name"
+              />
+            </div>
             <div>
               <span className="text-muted-foreground">Type:</span>
               <Badge variant="secondary" className="ml-2">
@@ -194,14 +257,16 @@ export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProp
             <label className="text-muted-foreground">Table Name</label>
             <input
               type="text"
-              defaultValue={selectedNode.tableName || ''}
+              value={tableName}
+              onChange={(e) => setTableName(e.target.value)}
               placeholder="Products"
               className="border rounded-md px-2 py-1 text-sm"
             />
 
             <label className="text-muted-foreground">Billing Mode</label>
             <select
-              defaultValue={selectedNode.billingMode || 'PAY_PER_REQUEST'}
+              value={billingMode}
+              onChange={(e) => setBillingMode(e.target.value)}
               className="border rounded-md px-2 py-1 text-sm"
             >
               <option value="PAY_PER_REQUEST">PAY_PER_REQUEST</option>
@@ -222,7 +287,11 @@ export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProp
               min={0}
               max={43200}
               step={1}
-              defaultValue={selectedNode.visibilityTimeoutSec ?? 30}
+              value={visibilityTimeoutSec}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                if (!Number.isNaN(v)) setVisibilityTimeoutSec(Math.min(43200, Math.max(0, v)))
+              }}
               className="w-28 border rounded-md px-2 py-1 text-sm"
             />
 
@@ -232,21 +301,27 @@ export function ServiceDetails({ selectedNode, connections }: ServiceDetailsProp
               min={60}
               max={1209600}
               step={60}
-              defaultValue={selectedNode.messageRetentionSec ?? 345600}
+              value={messageRetentionSec}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                if (!Number.isNaN(v)) setMessageRetentionSec(Math.min(1209600, Math.max(60, v)))
+              }}
               className="w-28 border rounded-md px-2 py-1 text-sm"
             />
 
             <label className="text-muted-foreground">FIFO Queue</label>
             <input
               type="checkbox"
-              defaultChecked={selectedNode.fifoQueue ?? false}
+              checked={fifoQueue}
+              onChange={(e) => setFifoQueue(e.target.checked)}
               className="h-4 w-4"
             />
 
             <label className="text-muted-foreground">Content-based Deduplication</label>
             <input
               type="checkbox"
-              defaultChecked={selectedNode.contentBasedDeduplication ?? false}
+              checked={contentBasedDeduplication}
+              onChange={(e) => setContentBasedDeduplication(e.target.checked)}
               className="h-4 w-4"
             />
           </div>
