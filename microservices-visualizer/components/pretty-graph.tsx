@@ -894,16 +894,14 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
 
     select(lineEl).attr("mask", `url(#${maskId})`)
 
-    // Create traveling dot
+    // Create simple, clean traveling dot
     const dot = (container.append("circle") as any)
       .attr("class", "__runDot")
-      .attr("r", 6)
-      .attr("fill", "#22d3ee")
-      .attr("stroke", "#ffffff")
-      .attr("stroke-width", 2)
+      .attr("r", 3)
+      .attr("fill", "#1f2937")
       .attr("cx", sx)
       .attr("cy", sy)
-      .style("filter", "drop-shadow(0 2px 4px rgba(0,0,0,0.3))")
+      .style("filter", "drop-shadow(0 1px 2px rgba(0,0,0,0.1))")
       .node() as SVGCircleElement
 
     await new Promise<void>((resolve) => {
@@ -915,56 +913,47 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
             select(dot).remove()
             mask.remove()
           } catch {}
-          // Show final line state
+          // Show final clean line state
           select(lineEl)
             .attr("mask", null)
             .attr("stroke-opacity", 0.7)
             .attr("marker-end", "url(#arrowhead)")
-            .attr("filter", null)
           resolve()
         }
       })
 
-      // Step 1: Draw the line progressively while dot travels
+      // Step 1: Draw the line smoothly
       tl.to(lineEl, { 
         duration: 0.6, 
-        attr: { "stroke-opacity": 1 }, 
-        ease: "power2.out" 
+        attr: { "stroke-opacity": 0.6 }, 
+        ease: "power1.out" 
       }, 0)
       
       tl.to(maskRect.node(), { 
         duration: 0.6, 
         attr: { width: lineLength }, 
-        ease: "power2.out" 
+        ease: "power1.out" 
       }, 0)
 
-      // Step 2: Dot travels along the drawn line (slightly delayed)
+      // Step 2: Dot travels smoothly along the line
       tl.to(dot, {
-        duration: 0.7,
+        duration: 0.8,
         attr: { cx: tx, cy: ty },
         ease: "power1.inOut"
-      }, 0.1)
+      }, 0.3)
 
-      // Step 3: Arrival pulse and glow
-      tl.to(lineEl, {
-        duration: 0.3,
-        attr: { filter: "url(#edgeGlow)" },
+      // Step 3: Subtle arrival indication
+      tl.to(dot, {
+        duration: 0.15,
+        attr: { r: 4 },
         ease: "power2.out"
-      }, 0.6)
+      }, 1.0)
 
       tl.to(dot, {
         duration: 0.15,
-        attr: { r: 10 },
-        opacity: 0.7,
-        ease: "back.out(2)"
-      }, 0.8)
-
-      tl.to(dot, {
-        duration: 0.15,
-        attr: { r: 6 },
-        opacity: 1,
+        attr: { r: 3 },
         ease: "power2.out"
-      }, 0.95)
+      }, 1.15)
 
       // Step 4: Show arrow marker
       tl.to(lineEl, {
@@ -989,8 +978,8 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
       await fadeInNode(e.source.id)
       // Start edge animation and target reveal simultaneously when dot arrives
       const edgePromise = animateEdge(e)
-      // Wait a bit for the dot to travel, then reveal target
-      setTimeout(() => fadeInNode(e.target.id), 500)
+      // Wait for dot to arrive, then reveal target smoothly
+      setTimeout(() => fadeInNode(e.target.id), 700)
       await edgePromise
     }
       // Restore default visuals
@@ -1005,7 +994,10 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId }: Pret
     return () => {
       gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
       gsapTweensRef.current = []
-      try { container.selectAll("circle.__runDot").remove() } catch {}
+      try { 
+        container.selectAll("circle.__runDot").remove()
+        container.selectAll("mask[id^='lineMask_']").remove()
+      } catch {}
       isAnimatingRef.current = false
     }
   }, [runId])
