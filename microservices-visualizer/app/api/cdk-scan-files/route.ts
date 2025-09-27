@@ -580,7 +580,8 @@ export async function POST(request: NextRequest) {
         console.log('Using cached CDK scan result')
         return NextResponse.json({
           ...cachedResult,
-          cached: true
+          cached: true,
+          cacheKey
         })
       } catch (error) {
         console.warn('Failed to read cache:', error)
@@ -645,7 +646,44 @@ export async function POST(request: NextRequest) {
       console.warn('Failed to cache result:', error)
     }
 
-    return NextResponse.json(result)
+    // Fire-and-forget: spawn architecture reviewer in parallel, reading from cache and writing to its own cache
+    try {
+      const reviewOutDir = path.join(process.cwd(), '.cache', 'ai-reviews')
+      await fs.mkdir(reviewOutDir, { recursive: true })
+      const reviewOutPath = path.join(reviewOutDir, `${cacheKey}.json`)
+
+      // If a review already exists for this cache key, reuse it instead of re-running AI
+      try {
+        await fs.access(reviewOutPath)
+        console.log('🧠 Using cached AI review:', reviewOutPath)
+      } catch {
+        const reviewerPath = path.join(process.cwd(), 'backend', 'architecture_reviewer.py')
+        const openaiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
+
+        console.log('🤖 Spawning architecture reviewer (background) ...')
+        console.log('   • Reviewer script:', reviewerPath)
+        console.log('   • Input cache:', cacheFilePath)
+        console.log('   • Output path:', reviewOutPath)
+        console.log('   • OpenAI key present:', !!openaiKey)
+
+        const { spawn } = await import('child_process')
+        const args = ['--in', cacheFilePath, '--out', reviewOutPath]
+        if (openaiKey) args.push('--openai-key', openaiKey)
+
+        const child = spawn('python3', [reviewerPath, ...args], {
+          stdio: 'ignore',
+          env: { ...process.env, OPENAI_KEY: openaiKey },
+          detached: true,
+        })
+        // Let it continue after request returns
+        child.unref()
+        console.log('✅ Architecture reviewer started in background')
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to start architecture reviewer in background:', err)
+    }
+
+    return NextResponse.json({ ...result, cacheKey })
 
   } catch (error) {
     console.error('CDK file scan error:', error)

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PrettyGraph } from "@/components/pretty-graph"
@@ -36,10 +36,15 @@ export default function HomePage() {
   const [services, setServices] = useState<MicroserviceNode[]>([])
   const [connections, setConnections] = useState<ServiceConnection[]>([])
   const [selectedNode, setSelectedNode] = useState<MicroserviceNode | null>(null)
-  const [isConsoleOpen, setIsConsoleOpen] = useState(true)
-  const [consoleWidth, setConsoleWidth] = useState(420)
-  const resizeRef = (typeof window !== 'undefined') ? (window as any).__consoleResizeRef || { active:false, startX:0, startWidth:0 } : { active:false, startX:0, startWidth:0 }
-  if (typeof window !== 'undefined') { (window as any).__consoleResizeRef = resizeRef }
+  const [runId, setRunId] = useState<number>(0)
+  const [runFinished, setRunFinished] = useState<boolean>(false)
+  const [reviewCacheKey, setReviewCacheKey] = useState<string | null>(null)
+  const [reviewStatus, setReviewStatus] = useState<'idle'|'pending'|'ready'|'not_found'|'error'>("idle")
+  const [review, setReview] = useState<any | null>(null)
+  const pollTimerRef = useRef<number | null>(null)
+  const [severityFilter, setSeverityFilter] = useState<'all'|'critical'|'high'|'medium'|'low'|'info'>("all")
+  const [highlightedNodes, setHighlightedNodes] = useState<string[]>([])
+
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
     setSelectedNode(node)
@@ -58,13 +63,76 @@ export default function HomePage() {
     }
   }
 
+  // Poll for AI review once we have a cache key
+  useEffect(() => {
+    if (!reviewCacheKey) return
+    let attempts = 0
+    setReviewStatus('pending')
+    setReview(null)
+
+    const poll = async () => {
+      attempts++
+      try {
+        const res = await fetch(`/api/ai-review/${reviewCacheKey}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === 'ready') {
+            setReviewStatus('ready')
+            setReview(data.review)
+            if (pollTimerRef.current) { window.clearInterval(pollTimerRef.current) }
+            pollTimerRef.current = null
+            return
+          }
+          // still pending
+          setReviewStatus('pending')
+        } else {
+          const data = await res.json().catch(() => ({}))
+          if (res.status === 404) setReviewStatus('not_found')
+          else setReviewStatus('error')
+          if (pollTimerRef.current) { window.clearInterval(pollTimerRef.current) }
+          pollTimerRef.current = null
+          return
+        }
+      } catch {
+        setReviewStatus('error')
+        if (pollTimerRef.current) { window.clearInterval(pollTimerRef.current) }
+        pollTimerRef.current = null
+        return
+      }
+      if (attempts >= 60) { // ~2 minutes max if 2s interval
+        if (pollTimerRef.current) { window.clearInterval(pollTimerRef.current) }
+        pollTimerRef.current = null
+      }
+    }
+
+    pollTimerRef.current = window.setInterval(poll, 2000)
+    // Kick immediate first poll
+    poll()
+
+    return () => {
+      if (pollTimerRef.current) window.clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }, [reviewCacheKey, runId])
+
   const loadAiGraph = async () => {
     try {
-      console.log('Attempting to load graph from /graph_v4_final.json...')
+      console.log('Loading latest cached graph...')
+      const res = await fetch('/api/cdk-scan-files/latest')
+      if (res.ok) {
+        const latest = await res.json()
+        if (latest?.graph) {
+          const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(latest.graph)
+          setServices(mappedServices)
+          setConnections(mappedConnections)
+          if (latest.cacheKey) setReviewCacheKey(latest.cacheKey)
+          return
+        }
+      }
+      // Fallback to bundled sample if no cache
+      console.log('No cached graph found. Falling back to sample file.')
       const aiGraph = await loadGraphFromFile('/graph_v4_final.json')
-      console.log('Graph loaded successfully:', aiGraph)
       const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(aiGraph)
-      console.log('Mapped services:', mappedServices.length, 'connections:', mappedConnections.length)
       setServices(mappedServices)
       setConnections(mappedConnections)
     } catch (error) {
@@ -163,14 +231,17 @@ export default function HomePage() {
 
         {/* Actions */}
         <div className="space-y-2 pt-4 border-t">
-          <Button onClick={loadAiGraph} className="w-full" variant="default">
-            <Zap className="h-4 w-4 mr-2" />
-            Load Sample Graph
-          </Button>
+              <Button onClick={loadAiGraph} className="w-full" variant="default">
+                <Zap className="h-4 w-4 mr-2" />
+                Load Graph
+              </Button>
           
           {/* CDK Folder Scanner */}
           <div className="pt-2">
-            <FolderSelector onGraphGenerated={handleGraphGenerated} />
+            <FolderSelector 
+              onGraphGenerated={handleGraphGenerated} 
+              onReviewCacheKey={(key) => setReviewCacheKey(key)}
+            />
           </div>
           
           <Button onClick={exportGraph} variant="outline" className="w-full">
@@ -191,6 +262,8 @@ export default function HomePage() {
             <div>Type: {selectedNode.technologies?.[0] || selectedNode.type}</div>
           </div>
         )}
+
+        
       </div>
 
       {/* Main Graph Area */}
@@ -205,7 +278,30 @@ export default function HomePage() {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                onClick={() => setRunId((r) => r + 1)}
+                onClick={async () => {
+                  setRunFinished(false)
+                  setHighlightedNodes([])
+                  // Ensure we have a cacheKey; if not, try latest
+                  let key = reviewCacheKey
+                  if (!key) {
+                    try {
+                      const r = await fetch('/api/cdk-scan-files/latest')
+                      if (r.ok) {
+                        const latest = await r.json()
+                        if (latest?.cacheKey) {
+                          key = latest.cacheKey
+                          setReviewCacheKey(key)
+                        }
+                      }
+                    } catch {}
+                  }
+                  // Trigger reviewer if we have a key
+                  if (key) {
+                    try { await fetch(`/api/ai-review/${key}`, { method: 'POST' }) } catch {}
+                    // start poll now (use effect will handle once key is set)
+                  }
+                  setRunId((r) => r + 1)
+                }}
                 variant="default"
               >
                 <Play className="h-4 w-4 mr-2" />
@@ -223,6 +319,8 @@ export default function HomePage() {
               onNodeSelect={handleNodeSelect}
               focusNodeId={selectedNode?.id || null}
               runId={runId}
+              onRunComplete={() => setRunFinished(true)}
+              highlightedNodeIds={highlightedNodes}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-center">
@@ -239,27 +337,138 @@ export default function HomePage() {
           )}
         </div>
       </div>
+      {/* Right Sidebar - AI Review */}
+      <div className="w-96 border-l bg-card p-4 space-y-4">
+        {reviewCacheKey ? (
+          <div className="space-y-2">
+            <div className="text-sm font-medium">AI Review</div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">Severity</label>
+              <select 
+                className="text-xs border rounded px-2 py-1 bg-background"
+                value={severityFilter}
+                onChange={(e) => setSeverityFilter(e.target.value as any)}
+              >
+                <option value="all">All</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+              </select>
+              <button 
+                className="text-xs underline text-muted-foreground"
+                onClick={() => setHighlightedNodes([])}
+              >Clear highlight</button>
+              {review && (
+                <div className="ml-auto flex gap-2">
+                  <button 
+                    className="text-xs underline text-muted-foreground" 
+                    onClick={() => {
+                      try {
+                        navigator.clipboard.writeText(JSON.stringify(review, null, 2))
+                      } catch {}
+                    }}
+                  >Copy JSON</button>
+                  <button 
+                    className="text-xs underline text-muted-foreground" 
+                    onClick={() => {
+                      const blob = new Blob([JSON.stringify(review, null, 2)], { type: 'application/json' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `ai-review-${reviewCacheKey}.json`
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      URL.revokeObjectURL(url)
+                    }}
+                  >Export</button>
+                </div>
+              )}
+            </div>
+            {runFinished ? (
+              reviewStatus === 'ready' && review ? (
+                <div className="p-3 bg-muted rounded-lg space-y-2 max-h-[75vh] overflow-auto">
+                  <div className="text-sm font-medium">Summary</div>
+                  <div className="text-sm text-muted-foreground">{review.summary}</div>
+                  {Array.isArray(review.recommendations) && review.recommendations.length > 0 && (
+                    <div className="text-sm">
+                      <div className="font-medium mt-2">Recommendations</div>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        {review.recommendations.slice(0,5).map((r: string, i: number) => (
+                          <li key={i} className="text-muted-foreground">{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {Array.isArray(review.findings) && review.findings.length > 0 && (
+                    <div className="text-sm">
+                      <div className="font-medium mt-2">Findings ({review.findings.length})</div>
+                      <div className="mt-1 space-y-2">
+                        {review.findings
+                          .filter((f: any) => severityFilter === 'all' || (f.severity || 'info').toLowerCase() === severityFilter)
+                          .sort((a: any, b: any) => {
+                            const order = { critical: 5, high: 4, medium: 3, low: 2, info: 1 } as any
+                            return (order[(b.severity||'info').toLowerCase()]||0) - (order[(a.severity||'info').toLowerCase()]||0)
+                          })
+                          .slice(0, 15)
+                          .map((f: any) => {
+                            const sev = (f.severity || 'info').toLowerCase()
+                            const sevStyles: Record<string, string> = {
+                              critical: 'bg-red-100 text-red-800 border-red-200',
+                              high: 'bg-orange-100 text-orange-800 border-orange-200',
+                              medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                              low: 'bg-blue-100 text-blue-800 border-blue-200',
+                              info: 'bg-slate-100 text-slate-800 border-slate-200'
+                            }
+                            return (
+                              <button
+                                key={f.id}
+                                className={`w-full text-left p-2 rounded border bg-background hover:bg-accent/50`}
+                                onClick={() => setHighlightedNodes(Array.isArray(f.nodes) ? f.nodes : [])}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${sevStyles[sev] || sevStyles.info}`}>
+                                    {f.severity || 'info'}
+                                  </span>
+                                  {Array.isArray(f.nodes) && f.nodes.length > 0 && (
+                                    <span className="text-[10px] text-muted-foreground">{f.nodes.length} node(s)</span>
+                                  )}
+                                </div>
+                                <div className="text-sm font-medium mt-1">{f.message}</div>
+                                {f.details && (
+                                  <div className="text-xs text-muted-foreground mt-1">{f.details}</div>
+                                )}
+                                {Array.isArray(f.references) && f.references.length > 0 && (
+                                  <div className="mt-1 flex flex-wrap gap-2">
+                                    {f.references.slice(0,2).map((url: string, i: number) => (
+                                      <a key={i} href={url} target="_blank" rel="noreferrer" className="text-xs underline text-blue-600">
+                                        Doc {i+1}
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                              </button>
+                            )
+                          })
+                        }
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : reviewStatus === 'pending' ? (
+                <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">Review in progress…</div>
+              ) : reviewStatus === 'error' ? (
+                <div className="p-3 bg-muted rounded-lg text-sm text-destructive">Failed to load review.</div>
+              ) : null
+            ) : (
+              <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">Run simulation to view results</div>
+            )}
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">Load a graph or scan to enable AI review.</div>
 
-      {/* Resizer + Right Console - Selected Service Details */}
-      {isConsoleOpen && (
-        <div
-          onMouseDown={onStartResize}
-          className="w-1 cursor-col-resize bg-gray-200 hover:bg-gray-300"
-          aria-hidden
-        />
-      )}
-      <div
-        className={`border-l bg-white flex flex-col transition-[width] duration-200 ${isConsoleOpen ? 'p-3' : 'p-0'}`}
-        style={{ width: isConsoleOpen ? consoleWidth : 0, overflow: 'hidden' }}
-      >
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-sm font-semibold">Details</div>
-          <Button size="icon" variant="ghost" onClick={() => setIsConsoleOpen(!isConsoleOpen)} aria-label="Toggle console">
-            {isConsoleOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </Button>
-        </div>
-        {isConsoleOpen && (
-          <ServiceDetails selectedNode={selectedNode} connections={connections} />
         )}
       </div>
     </div>

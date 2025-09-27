@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast"
 
 interface FolderSelectorProps {
   onGraphGenerated: (graph: any) => void
+  onReviewCacheKey?: (key: string) => void
 }
 
 interface SelectedFolder {
@@ -162,6 +163,9 @@ export function FolderSelector({ onGraphGenerated }: FolderSelectorProps) {
 
       const result = await response.json()
       setScanResult(result)
+      if (result?.cacheKey && onReviewCacheKey) {
+        try { onReviewCacheKey(result.cacheKey) } catch {}
+      }
 
       if (result.graph) {
         onGraphGenerated(result.graph)
