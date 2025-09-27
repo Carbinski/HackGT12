@@ -1160,79 +1160,90 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId, onRunC
         viewBox="0 0 800 600"
         className="border-0"
       />
-      {/* Zoom Controls */}
-      <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-        <Button
-          size="icon"
-          variant="secondary"
-          onClick={() => {
-            const svg = select(svgRef.current!)
-            const zb = zoomBehaviorRef.current
-            if (!zb) return
-            const t = (select(svgRef.current!) as any).property("__zoom") || zoomIdentity
-            const next = t.scale(1.2)
-            svg.transition().duration(250).call(zb.transform, next)
-          }}
-          aria-label="Zoom in"
-        >
-          +
-        </Button>
-        <Button
-          size="icon"
-          variant="secondary"
-          onClick={() => {
-            const svg = select(svgRef.current!)
-            const zb = zoomBehaviorRef.current
-            if (!zb) return
-            const t = (select(svgRef.current!) as any).property("__zoom") || zoomIdentity
-            const next = t.scale(1/1.2)
-            svg.transition().duration(250).call(zb.transform, next)
-          }}
-          aria-label="Zoom out"
-        >
-          −
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            // Fit to bounds
-            const svg = select(svgRef.current!)
-            const container = select(containerRef.current)
-            const zb = zoomBehaviorRef.current
-            if (!zb || !containerRef.current) return
-            try {
-              const bounds = (containerRef.current as any).getBBox()
-              const width = 800
-              const height = 600
-              if (bounds && bounds.width > 0 && bounds.height > 0) {
-                const scale = Math.min(width / bounds.width, height / bounds.height) * 0.8
-                const clampedScale = Math.max(0.3, Math.min(2, scale))
-                const translateX = (width - bounds.width * clampedScale) / 2 - bounds.x * clampedScale
-                const translateY = (height - bounds.height * clampedScale) / 2 - bounds.y * clampedScale
-                svg.transition().duration(350).call(zb.transform, zoomIdentity.translate(translateX, translateY).scale(clampedScale))
-              }
-            } catch {}
-          }}
-        >
-          Fit
-        </Button>
+      {/* Zoom Controls - horizontal bar above helper */}
+      <div className="absolute left-70 top-1 z-30 m-2">
+        <div className="inline-flex items-center gap-1 rounded-md bg-white/90 backdrop-blur-sm border shadow-sm px-2 py-1">
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-7 w-7 p-0"
+            onClick={() => {
+              const svg = select(svgRef.current!)
+              const zb = zoomBehaviorRef.current
+              if (!zb) return
+              const t = (select(svgRef.current!) as any).property("__zoom") || zoomIdentity
+              const next = t.scale(1.2)
+              svg.transition().duration(250).call(zb.transform, next)
+            }}
+            aria-label="Zoom in"
+          >
+            +
+          </Button>
+          <Button
+            size="icon"
+            variant="secondary"
+            className="h-7 w-7 p-0"
+            onClick={() => {
+              const svg = select(svgRef.current!)
+              const zb = zoomBehaviorRef.current
+              if (!zb) return
+              const t = (select(svgRef.current!) as any).property("__zoom") || zoomIdentity
+              const next = t.scale(1/1.2)
+              svg.transition().duration(250).call(zb.transform, next)
+            }}
+            aria-label="Zoom out"
+          >
+            −
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 py-1 text-xs"
+            onClick={() => {
+              // Fit to bounds
+              const svg = select(svgRef.current!)
+              const container = select(containerRef.current)
+              const zb = zoomBehaviorRef.current
+              if (!zb || !containerRef.current) return
+              try {
+                const bounds = (containerRef.current as any).getBBox()
+                const width = 800
+                const height = 600
+                if (bounds && bounds.width > 0 && bounds.height > 0) {
+                  const scale = Math.min(width / bounds.width, height / bounds.height) * 0.8
+                  const clampedScale = Math.max(0.3, Math.min(2, scale))
+                  const translateX = (width - bounds.width * clampedScale) / 2 - bounds.x * clampedScale
+                  const translateY = (height - bounds.height * clampedScale) / 2 - bounds.y * clampedScale
+                  svg.transition().duration(350).call(zb.transform, zoomIdentity.translate(translateX, translateY).scale(clampedScale))
+                }
+              } catch {}
+            }}
+          >
+            Fit
+          </Button>
+        </div>
       </div>
       
       {/* Instructions (collapsible) */}
-      <div className="absolute top-4 left-4">
+      <div className="absolute top-3 left-4">
         <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border text-xs text-slate-600 max-w-sm overflow-hidden">
-          <div className="flex items-center justify-between px-3 py-2 border-b">
+          <div className="flex items-center justify-between px-2 h-9 border-b gap-2">
             <div className="font-medium">AWS Architecture Visualization</div>
             <button
-              className="text-slate-500 hover:text-slate-700 text-[11px]"
+              className="text-slate-500 hover:text-slate-700 text-[11px] ml-1"
               onClick={() => setHelpOpen((v) => !v)}
             >
               {helpOpen ? 'Hide' : 'Show'}
             </button>
           </div>
-          {helpOpen && (
-            <div className="p-3">
+          <div
+            className="grid transition-[grid-template-rows] duration-300 ease-in-out"
+            style={{ gridTemplateRows: helpOpen ? '1fr' : '0fr' }}
+            aria-hidden={!helpOpen}
+          >
+            <div
+              className={`overflow-hidden transition-opacity duration-300 ease-in-out ${helpOpen ? 'opacity-100 p-3' : 'opacity-0 px-3 pt-0 pb-0'}`}
+            >
               <div className="mb-2">
                 <div className="font-medium text-[10px] mb-1">Controls:</div>
                 <div>• Click nodes to highlight connections</div>
@@ -1252,7 +1263,7 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId, onRunC
                 <div>• Colors indicate connection type</div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
