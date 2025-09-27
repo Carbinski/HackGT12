@@ -24,12 +24,12 @@ export interface AiGraph {
 
 // Map AI graph node types to UI service types
 const NODE_TYPE_MAPPING: Record<string, MicroserviceNode["type"]> = {
-  "Lambda": "api",
+  "Lambda": "compute",
   "Table": "database", 
   "Queue": "queue",
-  "Topic": "queue",
+  "Topic": "message",
   "ApiGateway": "api",
-  "StepFn": "api"
+  "StepFn": "stepfn"
 }
 
 // Map AI graph edge kinds to UI connection types
@@ -45,8 +45,28 @@ export function mapAiGraphToUiFormat(aiGraph: AiGraph): {
   services: MicroserviceNode[]
   connections: ServiceConnection[]
 } {
-  // Convert nodes
-  const services: MicroserviceNode[] = aiGraph.nodes.map(node => {
+  // Accept alternative shapes and guard against undefined
+  const fallbackServices = (aiGraph as any)?.services as MicroserviceNode[] | undefined
+  const fallbackConnections = (aiGraph as any)?.connections as ServiceConnection[] | undefined
+
+  // Prefer nodes/edges from AI graph; fall back if provided in UI format already
+  const nodes: AiGraphNode[] = Array.isArray((aiGraph as any)?.nodes)
+    ? ((aiGraph as any).nodes as AiGraphNode[])
+    : []
+  const edges: AiGraphEdge[] = Array.isArray((aiGraph as any)?.edges)
+    ? ((aiGraph as any).edges as AiGraphEdge[])
+    : []
+
+  // If the input is already in UI format, just return it as-is
+  if ((!nodes || nodes.length === 0) && Array.isArray(fallbackServices) && Array.isArray(fallbackConnections)) {
+    return {
+      services: fallbackServices,
+      connections: fallbackConnections,
+    }
+  }
+
+  // Convert nodes (safe)
+  const services: MicroserviceNode[] = (nodes || []).map(node => {
     const uiNode: MicroserviceNode = {
       id: node.id,
       name: node.label || node.id,
@@ -58,13 +78,47 @@ export function mapAiGraphToUiFormat(aiGraph: AiGraph): {
     }
 
     // Add type-specific properties (with null checks)
-    if (node.type === "Lambda" && node.props?.timeoutMs) {
-      uiNode.description += ` (${node.props.timeoutMs}ms timeout)`
+    if (node.type === "Lambda") {
+      if (node.props?.timeoutMs) {
+        uiNode.description += ` (${node.props.timeoutMs}ms timeout)`
+        uiNode.timeoutSec = Math.round(Number(node.props.timeoutMs) / 1000)
+      }
+      if (node.props?.memorySize) {
+        uiNode.memoryMb = Number(node.props.memorySize)
+      }
+      if (node.props?.runtime) {
+        const rt = String(node.props.runtime).toLowerCase()
+        // Normalize runtime
+        uiNode.runtime = rt.includes("python") ? "python" : rt.includes("node") ? "nodejs" : rt.includes("java") ? "java" : rt.includes("go") ? "go" : rt.includes("dotnet") ? "dotnet" : undefined
+      }
+    }
+    if (node.type === "Queue") {
+      if (node.props?.visibilityTimeoutSec != null) {
+        uiNode.visibilityTimeoutSec = Number(node.props.visibilityTimeoutSec)
+      }
+      if (node.props?.messageRetentionSec != null) {
+        uiNode.messageRetentionSec = Number(node.props.messageRetentionSec)
+      }
+      if (node.props?.fifoQueue != null) {
+        uiNode.fifoQueue = Boolean(node.props.fifoQueue)
+      }
+      if (node.props?.contentBasedDeduplication != null) {
+        uiNode.contentBasedDeduplication = Boolean(node.props.contentBasedDeduplication)
+      }
     }
     
     if (node.type === "ApiGateway") {
       uiNode.endpoints = [`/${node.id.toLowerCase()}`]
       uiNode.port = 443
+    }
+
+    if (node.type === "Table") {
+      if (node.label) {
+        uiNode.tableName = node.label
+      }
+      if (node.props?.billingMode) {
+        uiNode.billingMode = String(node.props.billingMode)
+      }
     }
 
     if (node.props?.retentionDays) {
@@ -74,8 +128,8 @@ export function mapAiGraphToUiFormat(aiGraph: AiGraph): {
     return uiNode
   })
 
-  // Convert edges to connections
-  const connections: ServiceConnection[] = aiGraph.edges.map(edge => {
+  // Convert edges to connections (safe)
+  const connections: ServiceConnection[] = (edges || []).map(edge => {
     const connection: ServiceConnection = {
       from: edge.from,
       to: edge.to,
@@ -142,7 +196,7 @@ export async function loadGraphFromFile(filePath: string): Promise<AiGraph> {
     const rawData = await response.json()
     console.log(`📥 Raw data loaded, checking structure...`)
     
-    // Handle different graph file structures
+    // Handle different graph file structures - combine both approaches
     let graphData: AiGraph
     
     if (rawData.nodes && rawData.edges) {
@@ -169,6 +223,12 @@ export async function loadGraphFromFile(filePath: string): Promise<AiGraph> {
         edges: rawData.causalityGraph.edges,
         meta: rawData.meta || {}
       }
+    } else if (rawData.cdkResult?.graph?.nodes) {
+      // CDK result format: { cdkResult: { graph: { nodes, edges } } }
+      graphData = rawData.cdkResult.graph
+    } else if (rawData.cdkResult?.nodes) {
+      // CDK result format: { cdkResult: { nodes, edges } }
+      graphData = rawData.cdkResult
     } else {
       throw new Error(`❌ Invalid graph format. Expected nodes and edges arrays but found: ${Object.keys(rawData).join(', ')}`)
     }

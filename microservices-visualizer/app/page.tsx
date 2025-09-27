@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PrettyGraph } from "@/components/pretty-graph"
 import { FolderSelector } from "@/components/folder-selector"
+import { ServiceDetails } from "@/components/service-details"
 import { loadGraphFromFile, mapAiGraphToUiFormat } from "@/lib/graph-mapper"
 import type { MicroserviceNode, ServiceConnection } from "@/lib/file-analyzer"
 import { 
@@ -16,6 +17,8 @@ import {
   Workflow,
   Download,
   RotateCcw,
+  ChevronLeft,
+  ChevronRight,
   Play
 } from "lucide-react"
 
@@ -41,6 +44,7 @@ export default function HomePage() {
   const pollTimerRef = useRef<number | null>(null)
   const [severityFilter, setSeverityFilter] = useState<'all'|'critical'|'high'|'medium'|'low'|'info'>("all")
   const [highlightedNodes, setHighlightedNodes] = useState<string[]>([])
+
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
     setSelectedNode(node)
@@ -176,6 +180,34 @@ export default function HomePage() {
     setSelectedNode(null)
   }
 
+  // Resizer handlers
+  const onStartResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    resizeRef.active = true
+    resizeRef.startX = e.clientX
+    resizeRef.startWidth = consoleWidth
+  }
+
+  // Global mouse listeners for resize
+  // Attach once
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  React.useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizeRef.active) return
+      const dx = resizeRef.startX - e.clientX
+      // Limit sliding range tighter per request
+      const next = Math.min(700, Math.max(300, resizeRef.startWidth + dx))
+      setConsoleWidth(next)
+    }
+    const onUp = () => { resizeRef.active = false }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
   return (
     <div className="h-screen bg-background flex">
       {/* Left Sidebar - Palette */}
@@ -285,6 +317,7 @@ export default function HomePage() {
               services={services} 
               connections={connections} 
               onNodeSelect={handleNodeSelect}
+              focusNodeId={selectedNode?.id || null}
               runId={runId}
               onRunComplete={() => setRunFinished(true)}
               highlightedNodeIds={highlightedNodes}
@@ -435,6 +468,7 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">Load a graph or scan to enable AI review.</div>
+
         )}
       </div>
     </div>

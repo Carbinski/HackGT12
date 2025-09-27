@@ -8,6 +8,18 @@ export interface MicroserviceNode {
   port?: number
   description?: string
   technologies: string[]
+  // Optional runtime/config fields (primarily for Lambda for now)
+  runtime?: string // e.g., "nodejs", "python", "go", "java", "dotnet"
+  memoryMb?: number // e.g., 128..10240
+  timeoutSec?: number // e.g., 1..900
+  // Optional SQS queue config
+  visibilityTimeoutSec?: number
+  messageRetentionSec?: number
+  fifoQueue?: boolean
+  contentBasedDeduplication?: boolean
+  // Optional table (DynamoDB) config
+  tableName?: string
+  billingMode?: string
 }
 
 export interface ServiceConnection {
