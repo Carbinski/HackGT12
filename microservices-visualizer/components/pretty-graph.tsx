@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import * as d3 from "d3-force"
-import { select } from "d3-selection"
+import { select, type Selection } from "d3-selection"
 import { zoom, zoomIdentity, zoomTransform } from "d3-zoom"
 import { drag } from "d3-drag"
 import { Button } from "@/components/ui/button"
@@ -15,11 +15,13 @@ import {
   Workflow,
   Cloud
 } from "lucide-react"
+import gsap from "gsap"
 
 interface PrettyGraphProps {
   services: MicroserviceNode[]
   connections: ServiceConnection[]
   onNodeSelect?: (node: MicroserviceNode | null) => void
+  runId?: number
 }
 
 // Service type colors based on AWS architecture patterns
@@ -140,13 +142,19 @@ function getServiceType(node: MicroserviceNode): string {
   return "compute" // Default to compute layer
 }
 
-export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraphProps) {
+export function PrettyGraph({ services, connections, onNodeSelect, runId }: PrettyGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null)
   const zoomBehaviorRef = useRef<any>(null)
   const containerRef = useRef<SVGGElement | null>(null)
   const selectedNodeRef = useRef<string | null>(null)
+  const nodesRef = useRef<GraphNode[]>([])
+  const linksRef = useRef<GraphLink[]>([])
+  const linkSelRef = useRef<any>(null)
+  const nodeSelRef = useRef<any>(null)
+  const isAnimatingRef = useRef<boolean>(false)
+  const gsapTweensRef = useRef<any[]>([])
 
   // Keep ref in sync without reinitializing the graph
   useEffect(() => {
@@ -221,6 +229,9 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
     })
     
     console.log(`📊 UI Graph Summary: ${nodes.length} nodes, ${links.length}/${connections.length} valid links`)
+
+    nodesRef.current = nodes
+    linksRef.current = links
 
     // Calculate node connectivity for intelligent spacing
     const nodeConnectivity = new Map<string, number>()
@@ -354,6 +365,20 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
       .attr("stroke", "#475569")
       .attr("stroke-width", 1)
 
+    // Edge glow filter for run animation
+    const glow = defs.append("filter")
+      .attr("id", "edgeGlow")
+      .attr("x", "-50%")
+      .attr("y", "-50%")
+      .attr("width", "200%")
+      .attr("height", "200%")
+    glow.append("feGaussianBlur")
+      .attr("stdDeviation", 4)
+      .attr("result", "coloredBlur")
+    const feMerge = glow.append("feMerge")
+    feMerge.append("feMergeNode").attr("in", "coloredBlur")
+    feMerge.append("feMergeNode").attr("in", "SourceGraphic")
+
     // Create enhanced links with different styles for different connection types
     const link = container.append("g")
       .selectAll("line")
@@ -388,6 +413,8 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
       })
       .attr("marker-end", "url(#arrowhead)")
 
+    linkSelRef.current = link
+
     // Create nodes
     const node = container.append("g")
       .selectAll("g")
@@ -411,6 +438,8 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
           d.fy = null
         })
       )
+
+    nodeSelRef.current = node
 
     // Node squares with AWS service icons
     node.append("rect")
@@ -729,6 +758,249 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
       simulation.stop()
     }
   }, [services, connections, onNodeSelect])
+
+  // Run animation effect (GSAP sequential timeline)
+  useEffect(() => {
+    if (!svgRef.current) return
+    if (!runId) return
+    if (!linksRef.current.length) return
+    if (isAnimatingRef.current) return
+
+    isAnimatingRef.current = true
+
+    const container = select(containerRef.current)
+    const linkSel = linkSelRef.current as Selection<SVGLineElement, GraphLink, any, any>
+    const nodeSel = nodeSelRef.current as Selection<SVGGElement, GraphNode, any, any>
+    if (!linkSel || !container || !nodeSel) {
+      isAnimatingRef.current = false
+      return
+    }
+
+    // Kill any previous tweens
+    gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
+    gsapTweensRef.current = []
+
+    console.log("🎬 Starting run animation - resetting graph...")
+
+    // Reset visibility
+    linkSel
+      .attr("filter", null)
+      .attr("stroke-opacity", 0)
+      .attr("marker-end", null)
+    nodeSel.style("opacity", 0)
+
+    // Build adjacency
+    const links = linksRef.current
+    const nodes = nodesRef.current
+
+    const adjacency = new Map<string, GraphLink[]>()
+    for (const l of links) {
+      if (!adjacency.has(l.source.id)) adjacency.set(l.source.id, [])
+      adjacency.get(l.source.id)!.push(l)
+    }
+
+    const indegrees = new Map(nodes.map(n => [n.id, 0]))
+    links.forEach(l => {
+      indegrees.set(l.target.id, (indegrees.get(l.target.id) || 0) + 1)
+    })
+
+    let roots = nodes.filter(n => (indegrees.get(n.id) || 0) === 0).map(n => n.id)
+
+    roots = roots.sort((a, b) => {
+      const aNode = nodes.find(n => n.id === a)!
+      const bNode = nodes.find(n => n.id === b)!
+      const aScore = (getServiceType(aNode) === 'api' ? 1 : 0) + (a.toLowerCase().includes('api') ? 1 : 0)
+      const bScore = (getServiceType(bNode) === 'api' ? 1 : 0) + (b.toLowerCase().includes('api') ? 1 : 0)
+      return bScore - aScore
+    })
+
+    const allBfsEdges: GraphLink[] = []
+    const globalVisited = new Set<string>()
+    for (const root of roots) {
+      if (globalVisited.has(root)) continue
+      const q: string[] = [root]
+      const localVisited = new Set<string>([root])
+      globalVisited.add(root)
+      const componentEdges: GraphLink[] = []
+      while (q.length) {
+        const current = q.shift()!
+        const outgoing = (adjacency.get(current) || []).filter((e: GraphLink) => !componentEdges.includes(e))
+        for (const e of outgoing) {
+          componentEdges.push(e)
+          if (!localVisited.has(e.target.id)) {
+            localVisited.add(e.target.id)
+            globalVisited.add(e.target.id)
+            q.push(e.target.id)
+          }
+        }
+      }
+    allBfsEdges.push(...componentEdges)
+  }
+
+  const revealed = new Set<string>()
+
+  const waitForLayoutStability = async () => {
+      const sim = simulationRef.current
+      if (!sim) return
+      const start = Date.now()
+      while (sim.alpha() > 0.06 && Date.now() - start < 2000) {
+        await new Promise(r => setTimeout(r, 50))
+      }
+    }
+
+    const fadeInNode = async (nodeId: string) => {
+      if (revealed.has(nodeId)) return
+      revealed.add(nodeId)
+      const els = nodeSel.filter((d: any) => d.id === nodeId).nodes()
+      if (els.length === 0) return
+      await new Promise<void>((resolve) => {
+        const tween = gsap.to(els, { duration: 0.4, opacity: 1, ease: "power2.out", onComplete: () => resolve() })
+        gsapTweensRef.current.push(tween)
+      })
+    }
+
+  const animateEdge = async (edge: GraphLink) => {
+    const lineEl = linkSel.filter((d: any) => d === edge).nodes()[0] as SVGLineElement
+    if (!lineEl) return
+
+    const read = (attr: string) => parseFloat(lineEl.getAttribute(attr) || '0')
+    const sx = read('x1')
+    const sy = read('y1')
+    const tx = read('x2')
+    const ty = read('y2')
+
+    // Start with line invisible
+    select(lineEl)
+      .attr("stroke-opacity", 0)
+      .attr("marker-end", null)
+
+    // Create a mask for line drawing effect
+    const lineLength = Math.sqrt((tx - sx) ** 2 + (ty - sy) ** 2)
+    const lineDef = container.select("defs")
+    if (lineDef.empty()) {
+      container.append("defs")
+    }
+    
+    const maskId = `lineMask_${Math.random().toString(36).substr(2, 9)}`
+    const mask = container.select("defs").append("mask").attr("id", maskId)
+    
+    const maskRect = mask.append("rect")
+      .attr("x", sx)
+      .attr("y", sy - 10)
+      .attr("width", 0)
+      .attr("height", 20)
+      .attr("fill", "white")
+      .attr("transform", `rotate(${Math.atan2(ty - sy, tx - sx) * 180 / Math.PI} ${sx} ${sy})`)
+
+    select(lineEl).attr("mask", `url(#${maskId})`)
+
+    // Create simple, clean traveling dot
+    const dot = (container.append("circle") as any)
+      .attr("class", "__runDot")
+      .attr("r", 3)
+      .attr("fill", "#1f2937")
+      .attr("cx", sx)
+      .attr("cy", sy)
+      .style("filter", "drop-shadow(0 1px 2px rgba(0,0,0,0.1))")
+      .node() as SVGCircleElement
+
+    await new Promise<void>((resolve) => {
+      // Create timeline for smooth coordinated animation
+      const tl = gsap.timeline({
+        onComplete: () => {
+          // Clean up
+          try { 
+            select(dot).remove()
+            mask.remove()
+          } catch {}
+          // Show final clean line state
+          select(lineEl)
+            .attr("mask", null)
+            .attr("stroke-opacity", 0.7)
+            .attr("marker-end", "url(#arrowhead)")
+          resolve()
+        }
+      })
+
+      // Step 1: Draw the line smoothly
+      tl.to(lineEl, { 
+        duration: 0.6, 
+        attr: { "stroke-opacity": 0.6 }, 
+        ease: "power1.out" 
+      }, 0)
+      
+      tl.to(maskRect.node(), { 
+        duration: 0.6, 
+        attr: { width: lineLength }, 
+        ease: "power1.out" 
+      }, 0)
+
+      // Step 2: Dot travels smoothly along the line
+      tl.to(dot, {
+        duration: 0.8,
+        attr: { cx: tx, cy: ty },
+        ease: "power1.inOut"
+      }, 0.3)
+
+      // Step 3: Subtle arrival indication
+      tl.to(dot, {
+        duration: 0.15,
+        attr: { r: 4 },
+        ease: "power2.out"
+      }, 1.0)
+
+      tl.to(dot, {
+        duration: 0.15,
+        attr: { r: 3 },
+        ease: "power2.out"
+      }, 1.15)
+
+      // Step 4: Show arrow marker
+      tl.to(lineEl, {
+        duration: 0.1,
+        attr: { "marker-end": "url(#arrowhead)" },
+        ease: "none"
+      }, 0.7)
+
+      gsapTweensRef.current.push(tl)
+    })
+  }
+
+    // Now animate allBfsEdges sequentially
+    ;(async () => {
+      // Ensure nodes/links are settled so coordinates line up with rendered lines
+      await waitForLayoutStability()
+      // Reveal all roots first
+      for (const root of roots) {
+        await fadeInNode(root)
+      }
+    for (const e of allBfsEdges) {
+      await fadeInNode(e.source.id)
+      // Start edge animation and target reveal simultaneously when dot arrives
+      const edgePromise = animateEdge(e)
+      // Wait for dot to arrive, then reveal target smoothly
+      setTimeout(() => fadeInNode(e.target.id), 700)
+      await edgePromise
+    }
+      // Restore default visuals
+      linkSel
+        .attr("filter", null)
+        .attr("stroke-opacity", 0.7)
+        .attr("marker-end", "url(#arrowhead)")
+      nodeSel.style("opacity", 1)
+      isAnimatingRef.current = false
+    })()
+
+    return () => {
+      gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
+      gsapTweensRef.current = []
+      try { 
+        container.selectAll("circle.__runDot").remove()
+        container.selectAll("mask[id^='lineMask_']").remove()
+      } catch {}
+      isAnimatingRef.current = false
+    }
+  }, [runId])
 
   if (services.length === 0) {
     return (
