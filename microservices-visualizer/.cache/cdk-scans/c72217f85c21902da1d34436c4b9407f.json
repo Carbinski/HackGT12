@@ -154,12 +154,7 @@
           "UserStack",
           "OrdersStack",
           "PaymentsStack",
-          "ApiGatewayStack",
-          "userStack",
-          "productStack",
-          "orderStack",
-          "paymentStack",
-          "apiGatewayStack"
+          "ApiGatewayStack"
         ],
         "constructs": [],
         "aws_services": [
@@ -355,16 +350,6 @@
         "project": "multirepo"
       },
       {
-        "id": "multirepo__ProductFunction-multirepo__ProductTable-read",
-        "from": "multirepo__ProductFunction",
-        "to": "multirepo__ProductTable",
-        "kind": "read",
-        "sync": true,
-        "originalFrom": "ProductFunction",
-        "originalTo": "ProductTable",
-        "project": "multirepo"
-      },
-      {
         "id": "multirepo__ProductApi-multirepo__ProductFunction-invoke",
         "from": "multirepo__ProductApi",
         "to": "multirepo__ProductFunction",
@@ -469,16 +454,6 @@
         "from": "multirepo__OrdersFn",
         "to": "multirepo__OrderTable",
         "kind": "read",
-        "sync": true,
-        "originalFrom": "OrdersFn",
-        "originalTo": "OrderTable",
-        "project": "multirepo"
-      },
-      {
-        "id": "multirepo__OrdersFn-multirepo__OrderTable-write",
-        "from": "multirepo__OrdersFn",
-        "to": "multirepo__OrderTable",
-        "kind": "write",
         "sync": true,
         "originalFrom": "OrdersFn",
         "originalTo": "OrderTable",

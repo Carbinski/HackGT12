@@ -193,22 +193,48 @@ export async function loadGraphFromFile(filePath: string): Promise<AiGraph> {
       throw new Error(`❌ Failed to load graph: ${response.status} ${response.statusText}`)
     }
     
-    const data = await response.json()
-    // Unwrap common shapes:
-    // 1) { cdkResult: { graph: { nodes, edges } } }
-    // 2) { cdkResult: { nodes, edges } }
-    // 3) { graph: { nodes, edges } }
-    // 4) { nodes, edges }
-    const anyData = data as any
-    const unwrapped = anyData?.cdkResult?.graph?.nodes
-      ? anyData.cdkResult.graph
-      : anyData?.cdkResult?.nodes
-      ? anyData.cdkResult
-      : anyData?.graph?.nodes
-      ? anyData.graph
-      : anyData
-    console.log(`✅ Graph data loaded successfully! Found ${unwrapped.nodes?.length || 0} nodes and ${unwrapped.edges?.length || 0} edges`)
-    return unwrapped
+    const rawData = await response.json()
+    console.log(`📥 Raw data loaded, checking structure...`)
+    
+    // Handle different graph file structures - combine both approaches
+    let graphData: AiGraph
+    
+    if (rawData.nodes && rawData.edges) {
+      // Direct AiGraph format
+      graphData = rawData
+    } else if (rawData.graph?.nodes && rawData.graph?.edges) {
+      // Nested under 'graph' key (like graph_v4_final.json)
+      graphData = {
+        nodes: rawData.graph.nodes,
+        edges: rawData.graph.edges,
+        meta: rawData.meta || {}
+      }
+    } else if (rawData.result?.nodes && rawData.result?.edges) {
+      // Nested under 'result' key
+      graphData = {
+        nodes: rawData.result.nodes,
+        edges: rawData.result.edges,
+        meta: rawData.meta || {}
+      }
+    } else if (rawData.causalityGraph?.nodes && rawData.causalityGraph?.edges) {
+      // Nested under 'causalityGraph' key
+      graphData = {
+        nodes: rawData.causalityGraph.nodes,
+        edges: rawData.causalityGraph.edges,
+        meta: rawData.meta || {}
+      }
+    } else if (rawData.cdkResult?.graph?.nodes) {
+      // CDK result format: { cdkResult: { graph: { nodes, edges } } }
+      graphData = rawData.cdkResult.graph
+    } else if (rawData.cdkResult?.nodes) {
+      // CDK result format: { cdkResult: { nodes, edges } }
+      graphData = rawData.cdkResult
+    } else {
+      throw new Error(`❌ Invalid graph format. Expected nodes and edges arrays but found: ${Object.keys(rawData).join(', ')}`)
+    }
+    
+    console.log(`✅ Graph data loaded successfully! Found ${graphData.nodes?.length || 0} nodes and ${graphData.edges?.length || 0} edges`)
+    return graphData
   } catch (error) {
     console.error("❌ Error loading graph:", error)
     

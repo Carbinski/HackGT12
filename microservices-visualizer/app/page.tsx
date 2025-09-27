@@ -18,7 +18,8 @@ import {
   Download,
   RotateCcw,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Play
 } from "lucide-react"
 
 // Available AWS service types for quick add
@@ -202,6 +203,15 @@ export default function HomePage() {
                 {services.length} services, {connections.length} connections
               </p>
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setRunId((r) => r + 1)}
+                variant="default"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Run
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -212,6 +222,7 @@ export default function HomePage() {
               connections={connections} 
               onNodeSelect={handleNodeSelect}
               focusNodeId={selectedNode?.id || null}
+              runId={runId}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-center">
