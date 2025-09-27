@@ -268,12 +268,10 @@ ${outputs.join('\n')}
               {copied ? (
                 <>
                   <Check className="h-4 w-4" />
-                  Copied!
                 </>
               ) : (
                 <>
                   <Copy className="h-4 w-4" />
-                  Copy Code
                 </>
               )}
             </Button>
@@ -284,7 +282,7 @@ ${outputs.join('\n')}
               className="flex items-center gap-2"
             >
               <Download className="h-4 w-4" />
-              Download
+            
             </Button>
           </div>
         </CardTitle>

@@ -232,9 +232,7 @@ console.log('${serviceName} service initialized');`
               </>
             ) : (
               <>
-                <Copy className="h-4 w-4" />
-                Copy Code
-              </>
+                <Copy className="h-4 w-4" />              </>
             )}
           </Button>
         </CardTitle>

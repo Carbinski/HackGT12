@@ -1,0 +1,271 @@
+{
+  "cdkResult": {
+    "summary": {
+      "total_projects": 1,
+      "total_files": 5,
+      "languages": [
+        "typescript"
+      ],
+      "aws_services": [
+        "sqs",
+        "kinesis",
+        "lambda",
+        "dynamodb",
+        "apigateway",
+        "ecs",
+        "iam"
+      ]
+    },
+    "projects": [
+      {
+        "repo_path": "aws-real-time-pipeline",
+        "repo_name": "aws-real-time-pipeline",
+        "has_cdk_json": true,
+        "has_package_json": true,
+        "cdk_files": [
+          {
+            "file_path": "aws-real-time-pipeline/cdk/test/cdk.test.ts",
+            "file_type": "code",
+            "relative_path": "cdk/test/cdk.test.ts",
+            "size": 553,
+            "language": "typescript"
+          },
+          {
+            "file_path": "aws-real-time-pipeline/cdk/bin/marketstream.ts",
+            "file_type": "code",
+            "relative_path": "cdk/bin/marketstream.ts",
+            "size": 906,
+            "language": "typescript"
+          },
+          {
+            "file_path": "aws-real-time-pipeline/cdk/lib/cdk-stack.ts",
+            "file_type": "code",
+            "relative_path": "cdk/lib/cdk-stack.ts",
+            "size": 5269,
+            "language": "typescript"
+          },
+          {
+            "file_path": "aws-real-time-pipeline/cdk/cdk.json",
+            "file_type": "config",
+            "relative_path": "cdk/cdk.json",
+            "size": 4802,
+            "language": "json"
+          },
+          {
+            "file_path": "aws-real-time-pipeline/cdk/package.json",
+            "file_type": "package",
+            "relative_path": "cdk/package.json",
+            "size": 482,
+            "language": "json"
+          }
+        ],
+        "stacks": [],
+        "constructs": [],
+        "aws_services": [
+          "sqs",
+          "kinesis",
+          "lambda",
+          "dynamodb",
+          "apigateway",
+          "ecs",
+          "iam"
+        ],
+        "languages": [
+          "typescript"
+        ],
+        "app_command": "npx ts-node --prefer-ts-exts bin/marketstream.ts",
+        "cdk_version": "2.189.0"
+      }
+    ]
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "aws-real-time-pipeline__TickTable",
+        "type": "Table",
+        "props": {
+          "billingMode": "PAY_PER_REQUEST"
+        },
+        "originalId": "TickTable",
+        "project": "aws-real-time-pipeline",
+        "label": "TickTable (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__DedupTable",
+        "type": "Table",
+        "props": {
+          "billingMode": "PAY_PER_REQUEST"
+        },
+        "originalId": "DedupTable",
+        "project": "aws-real-time-pipeline",
+        "label": "DedupTable (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__FanoutLambda",
+        "type": "Lambda",
+        "props": {
+          "timeoutMs": 10000,
+          "memorySize": 128
+        },
+        "originalId": "FanoutLambda",
+        "project": "aws-real-time-pipeline",
+        "label": "FanoutLambda (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__FanoutQueue",
+        "type": "Queue",
+        "props": {
+          "retentionDays": 3
+        },
+        "originalId": "FanoutQueue",
+        "project": "aws-real-time-pipeline",
+        "label": "FanoutQueue (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__IngestDQL",
+        "type": "Queue",
+        "props": {
+          "retentionDays": 3
+        },
+        "originalId": "IngestDQL",
+        "project": "aws-real-time-pipeline",
+        "label": "IngestDQL (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__IngestTickFunction",
+        "type": "Lambda",
+        "props": {},
+        "originalId": "IngestTickFunction",
+        "project": "aws-real-time-pipeline",
+        "label": "IngestTickFunction (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__TickAPI",
+        "type": "ApiGateway",
+        "props": {},
+        "originalId": "TickAPI",
+        "project": "aws-real-time-pipeline",
+        "label": "TickAPI (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__QueryLambda",
+        "type": "Lambda",
+        "props": {},
+        "originalId": "QueryLambda",
+        "project": "aws-real-time-pipeline",
+        "label": "QueryLambda (aws-real-time-pipeline)"
+      },
+      {
+        "id": "aws-real-time-pipeline__QueryRestAPI",
+        "type": "ApiGateway",
+        "props": {},
+        "originalId": "QueryRestAPI",
+        "project": "aws-real-time-pipeline",
+        "label": "QueryRestAPI (aws-real-time-pipeline)"
+      }
+    ],
+    "edges": [
+      {
+        "id": "aws-real-time-pipeline__TickTable-aws-real-time-pipeline__FanoutLambda-trigger",
+        "from": "aws-real-time-pipeline__TickTable",
+        "to": "aws-real-time-pipeline__FanoutLambda",
+        "kind": "trigger",
+        "sync": true,
+        "originalFrom": "TickTable",
+        "originalTo": "FanoutLambda",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__FanoutLambda-aws-real-time-pipeline__DedupTable-write",
+        "from": "aws-real-time-pipeline__FanoutLambda",
+        "to": "aws-real-time-pipeline__DedupTable",
+        "kind": "write",
+        "sync": true,
+        "originalFrom": "FanoutLambda",
+        "originalTo": "DedupTable",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__FanoutLambda-aws-real-time-pipeline__FanoutQueue-publish",
+        "from": "aws-real-time-pipeline__FanoutLambda",
+        "to": "aws-real-time-pipeline__FanoutQueue",
+        "kind": "publish",
+        "sync": true,
+        "originalFrom": "FanoutLambda",
+        "originalTo": "FanoutQueue",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__IngestTickFunction-aws-real-time-pipeline__TickTable-write",
+        "from": "aws-real-time-pipeline__IngestTickFunction",
+        "to": "aws-real-time-pipeline__TickTable",
+        "kind": "write",
+        "sync": true,
+        "originalFrom": "IngestTickFunction",
+        "originalTo": "TickTable",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__QueryLambda-aws-real-time-pipeline__TickTable-read",
+        "from": "aws-real-time-pipeline__QueryLambda",
+        "to": "aws-real-time-pipeline__TickTable",
+        "kind": "read",
+        "sync": true,
+        "originalFrom": "QueryLambda",
+        "originalTo": "TickTable",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__IngestTickFunction-aws-real-time-pipeline__IngestDQL-publish",
+        "from": "aws-real-time-pipeline__IngestTickFunction",
+        "to": "aws-real-time-pipeline__IngestDQL",
+        "kind": "publish",
+        "sync": true,
+        "originalFrom": "IngestTickFunction",
+        "originalTo": "IngestDQL",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__QueryLambda-aws-real-time-pipeline__IngestDQL-publish",
+        "from": "aws-real-time-pipeline__QueryLambda",
+        "to": "aws-real-time-pipeline__IngestDQL",
+        "kind": "publish",
+        "sync": true,
+        "originalFrom": "QueryLambda",
+        "originalTo": "IngestDQL",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__TickAPI-aws-real-time-pipeline__IngestTickFunction-invoke",
+        "from": "aws-real-time-pipeline__TickAPI",
+        "to": "aws-real-time-pipeline__IngestTickFunction",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "TickAPI",
+        "originalTo": "IngestTickFunction",
+        "project": "aws-real-time-pipeline"
+      },
+      {
+        "id": "aws-real-time-pipeline__QueryRestAPI-aws-real-time-pipeline__QueryLambda-invoke",
+        "from": "aws-real-time-pipeline__QueryRestAPI",
+        "to": "aws-real-time-pipeline__QueryLambda",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "QueryRestAPI",
+        "originalTo": "QueryLambda",
+        "project": "aws-real-time-pipeline"
+      }
+    ],
+    "meta": {
+      "source": "cdk_causality_analysis",
+      "projects": [
+        "aws-real-time-pipeline"
+      ],
+      "total_projects": 1,
+      "generated_at": "2025-09-27T19:14:42.768Z",
+      "ai_analyzed_files": 3
+    }
+  },
+  "cached": false,
+  "timestamp": "2025-09-27T19:14:42.769Z"
+}
