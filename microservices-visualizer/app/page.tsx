@@ -591,12 +591,18 @@ export default function HomePage() {
                 <Link className="h-4 w-4 text-blue-600" />
                 <h4 className="text-sm font-semibold text-blue-900">Connect to Other Services</h4>
               </div>
-              <p className="text-xs text-blue-700">Click to create connections between your services</p>
+              <p className="text-xs text-blue-700">
+                Click to create connections between your services
+                {connections.filter(conn => conn.from === selectedNode.id || conn.to === selectedNode.id).length > 0 && (
+                  <span className="ml-1 font-medium">
+                    • {connections.filter(conn => conn.from === selectedNode.id || conn.to === selectedNode.id).length} existing connections
+                  </span>
+                )}
+              </p>
               
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
                 {services
                   .filter(service => service.id !== selectedNode.id)
-                  .slice(0, 6)
                   .map(service => {
                     const connectionType = 
                       selectedNode.technologies[0] === "ApiGateway" && service.technologies[0] === "Lambda" ? "http" :
@@ -630,10 +636,13 @@ export default function HomePage() {
                       }
                     }
                     
-                    const isAlreadyConnected = connections.some(conn => 
-                      (conn.from === selectedNode.id && conn.to === service.id) ||
-                      (conn.from === service.id && conn.to === selectedNode.id)
-                    )
+                    const isAlreadyConnected = connections.some(conn => {
+                      // Check both directions of connection
+                      const isDirectConnection = conn.from === selectedNode.id && conn.to === service.id
+                      const isReverseConnection = conn.from === service.id && conn.to === selectedNode.id
+                      
+                      return isDirectConnection || isReverseConnection
+                    })
                     
                     return (
                       <button
@@ -656,6 +665,14 @@ export default function HomePage() {
                             className="h-4 w-4"
                           />
                           <span className="text-sm font-medium">{service.name}</span>
+                          {connections.filter(conn => conn.from === service.id || conn.to === service.id).length > 0 && (
+                            <div className="flex items-center gap-1">
+                              <div className="h-1.5 w-1.5 bg-blue-400 rounded-full"></div>
+                              <span className="text-xs text-blue-600">
+                                {connections.filter(conn => conn.from === service.id || conn.to === service.id).length}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           {isAlreadyConnected ? (
@@ -675,12 +692,6 @@ export default function HomePage() {
                     )
                   })}
               </div>
-              
-              {services.filter(service => service.id !== selectedNode.id).length > 6 && (
-                <p className="text-xs text-blue-600 text-center">
-                  +{services.filter(service => service.id !== selectedNode.id).length - 6} more services
-                </p>
-              )}
             </div>
           )}
 
