@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import React, { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { PrettyGraph } from "@/components/pretty-graph"
 import { FolderSelector } from "@/components/folder-selector"
 import { ServiceDetails } from "@/components/service-details"
@@ -44,10 +45,25 @@ export default function HomePage() {
   const pollTimerRef = useRef<number | null>(null)
   const [severityFilter, setSeverityFilter] = useState<'all'|'critical'|'high'|'medium'|'low'|'info'>("all")
   const [highlightedNodes, setHighlightedNodes] = useState<string[]>([])
+  const [consoleWidth, setConsoleWidth] = useState<number>(400)
+  const resizeRef = useRef<{ active: boolean; startX: number; startWidth: number }>({
+    active: false,
+    startX: 0,
+    startWidth: 400
+  })
+  const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(false)
+  const [rightSidebarContent, setRightSidebarContent] = useState<'service' | 'ai-review'>('service')
+  const [graphVersion, setGraphVersion] = useState<number>(0)
 
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
     setSelectedNode(node)
+    if (node) {
+      setRightSidebarContent('service')
+      setRightSidebarOpen(true)
+    } else {
+      setRightSidebarOpen(false)
+    }
   }
 
   const handleGraphGenerated = (aiGraph: any) => {
@@ -115,6 +131,28 @@ export default function HomePage() {
     }
   }, [reviewCacheKey, runId])
 
+  // Auto-load cache key only (not the full graph) on component mount
+  useEffect(() => {
+    console.log('🚀 Component mounted, loading cache key only...')
+    loadCacheKeyOnly()
+  }, [])
+
+  const loadCacheKeyOnly = async () => {
+    try {
+      console.log('Loading cache key from latest scan...')
+      const res = await fetch('/api/cdk-scan-files/latest')
+      if (res.ok) {
+        const latest = await res.json()
+        if (latest?.cacheKey) {
+          console.log('🔑 Setting review cache key:', latest.cacheKey)
+          setReviewCacheKey(latest.cacheKey)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load cache key:', error)
+    }
+  }
+
   const loadAiGraph = async () => {
     try {
       console.log('Loading latest cached graph...')
@@ -125,7 +163,10 @@ export default function HomePage() {
           const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(latest.graph)
           setServices(mappedServices)
           setConnections(mappedConnections)
-          if (latest.cacheKey) setReviewCacheKey(latest.cacheKey)
+          if (latest.cacheKey) {
+            console.log('🔑 Setting review cache key:', latest.cacheKey)
+            setReviewCacheKey(latest.cacheKey)
+          }
           return
         }
       }
@@ -183,9 +224,9 @@ export default function HomePage() {
   // Resizer handlers
   const onStartResize = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
-    resizeRef.active = true
-    resizeRef.startX = e.clientX
-    resizeRef.startWidth = consoleWidth
+    resizeRef.current.active = true
+    resizeRef.current.startX = e.clientX
+    resizeRef.current.startWidth = consoleWidth
   }
 
   // Global mouse listeners for resize
@@ -193,13 +234,13 @@ export default function HomePage() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   React.useEffect(() => {
     const onMove = (e: MouseEvent) => {
-      if (!resizeRef.active) return
-      const dx = resizeRef.startX - e.clientX
+      if (!resizeRef.current.active) return
+      const dx = resizeRef.current.startX - e.clientX
       // Limit sliding range tighter per request
-      const next = Math.min(700, Math.max(300, resizeRef.startWidth + dx))
+      const next = Math.min(700, Math.max(300, resizeRef.current.startWidth + dx))
       setConsoleWidth(next)
     }
-    const onUp = () => { resizeRef.active = false }
+    const onUp = () => { resizeRef.current.active = false }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     return () => {
@@ -254,14 +295,6 @@ export default function HomePage() {
           </Button>
         </div>
 
-        {/* Selected Node Info */}
-        {selectedNode && (
-          <div className="text-sm text-muted-foreground">
-            <div className="font-medium text-foreground">Selected</div>
-            <div className="mt-1">Name: {selectedNode.name}</div>
-            <div>Type: {selectedNode.technologies?.[0] || selectedNode.type}</div>
-          </div>
-        )}
 
         
       </div>
@@ -279,11 +312,37 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <Button
                 onClick={async () => {
+                  // Reset states and show AI review sidebar
+                  console.log('🚀 Run button clicked - resetting states')
                   setRunFinished(false)
                   setHighlightedNodes([])
+                  setRightSidebarContent('ai-review')
+                  setRightSidebarOpen(true)
+                  let graphReady = services.length > 0
+                  if (!graphReady) {
+                    console.log('📊 No graph data loaded yet. Loading before animation...')
+                    await loadAiGraph()
+                    // wait a frame for state updates to render
+                    await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)))
+                    graphReady = true
+                  } else {
+                    console.log('✅ Using in-memory graph for animation (no reload)')
+                  }
+
+                  if (graphReady) {
+                    requestAnimationFrame(() => {
+                      const newRunId = (runId || 0) + 1
+                      console.log('🎬 Triggering animation with runId:', newRunId)
+                      setGraphVersion((v) => v + 1)
+                      setRunId(newRunId)
+                    })
+                  }
+                  
                   // Ensure we have a cacheKey; if not, try latest
                   let key = reviewCacheKey
+                  console.log('🔑 Current reviewCacheKey:', key)
                   if (!key) {
+                    console.log('⚠️ No cache key found, fetching latest...')
                     try {
                       const r = await fetch('/api/cdk-scan-files/latest')
                       if (r.ok) {
@@ -295,12 +354,49 @@ export default function HomePage() {
                       }
                     } catch {}
                   }
-                  // Trigger reviewer if we have a key
+                  // Check for existing review first, only trigger new review if cache is empty
                   if (key) {
-                    try { await fetch(`/api/ai-review/${key}`, { method: 'POST' }) } catch {}
-                    // start poll now (use effect will handle once key is set)
+                    console.log(`🔍 Checking for cached AI review with key: ${key}`)
+                    try {
+                      // First check if review already exists in cache
+                      const reviewCheck = await fetch(`/api/ai-review/${key}`)
+                      console.log(`📋 Review API response status: ${reviewCheck.status}`)
+                      
+                      if (reviewCheck.ok) {
+                        const reviewData = await reviewCheck.json()
+                        console.log(`📋 Review data:`, reviewData)
+                        
+                        if (reviewData.status === 'ready' && reviewData.review) {
+                          // ✅ CACHE HIT: Use cached review immediately - NO OpenAI API call
+                          console.log('✅ CACHE HIT! Using cached AI review - NO OpenAI API call needed')
+                          console.log('📊 Review summary:', reviewData.review.summary)
+                          console.log('🔍 Number of findings:', reviewData.review.findings?.length || 0)
+                          setReviewStatus('ready')
+                          setReview(reviewData.review)
+                          // DON'T set runFinished here - let the animation complete first
+                        } else if (reviewData.status === 'pending') {
+                          console.log('⏳ Review already in progress, starting polling')
+                          setReviewStatus('pending')
+                          setRunFinished(false)
+                        } else {
+                          console.log('❌ No cached review found, triggering new OpenAI review')
+                          await fetch(`/api/ai-review/${key}`, { method: 'POST' })
+                          setReviewStatus('pending')
+                          setRunFinished(false)
+                        }
+                      } else {
+                        console.log('❌ No cached review found (404), triggering new OpenAI review')
+                        await fetch(`/api/ai-review/${key}`, { method: 'POST' })
+                        setReviewStatus('pending')
+                        setRunFinished(false)
+                      }
+                    } catch (error) {
+                      console.error('❌ Error checking/triggering AI review:', error)
+                      try { await fetch(`/api/ai-review/${key}`, { method: 'POST' }) } catch {}
+                      setReviewStatus('pending')
+                      setRunFinished(false)
+                    }
                   }
-                  setRunId((r) => r + 1)
                 }}
                 variant="default"
               >
@@ -314,12 +410,16 @@ export default function HomePage() {
         <div className="flex-1">
           {services.length > 0 ? (
             <PrettyGraph 
+              key={graphVersion}
               services={services} 
               connections={connections} 
               onNodeSelect={handleNodeSelect}
               focusNodeId={selectedNode?.id || null}
               runId={runId}
-              onRunComplete={() => setRunFinished(true)}
+              onRunComplete={() => {
+                console.log('🎉 Animation completed! Setting runFinished to true')
+                setRunFinished(true)
+              }}
               highlightedNodeIds={highlightedNodes}
             />
           ) : (
@@ -337,140 +437,241 @@ export default function HomePage() {
           )}
         </div>
       </div>
-      {/* Right Sidebar - AI Review */}
-      <div className="w-96 border-l bg-card p-4 space-y-4">
-        {reviewCacheKey ? (
-          <div className="space-y-2">
-            <div className="text-sm font-medium">AI Review</div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">Severity</label>
-              <select 
-                className="text-xs border rounded px-2 py-1 bg-background"
-                value={severityFilter}
-                onChange={(e) => setSeverityFilter(e.target.value as any)}
-              >
-                <option value="all">All</option>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-                <option value="info">Info</option>
-              </select>
-              <button 
-                className="text-xs underline text-muted-foreground"
-                onClick={() => setHighlightedNodes([])}
-              >Clear highlight</button>
-              {review && (
-                <div className="ml-auto flex gap-2">
-                  <button 
-                    className="text-xs underline text-muted-foreground" 
-                    onClick={() => {
-                      try {
-                        navigator.clipboard.writeText(JSON.stringify(review, null, 2))
-                      } catch {}
-                    }}
-                  >Copy JSON</button>
-                  <button 
-                    className="text-xs underline text-muted-foreground" 
-                    onClick={() => {
-                      const blob = new Blob([JSON.stringify(review, null, 2)], { type: 'application/json' })
-                      const url = URL.createObjectURL(blob)
-                      const a = document.createElement('a')
-                      a.href = url
-                      a.download = `ai-review-${reviewCacheKey}.json`
-                      document.body.appendChild(a)
-                      a.click()
-                      document.body.removeChild(a)
-                      URL.revokeObjectURL(url)
-                    }}
-                  >Export</button>
-                </div>
+      {/* Right Sidebar - Conditional Content */}
+      {rightSidebarOpen && (
+        <div className="w-96 border-l bg-card p-4 space-y-4">
+          {/* Close button */}
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">
+              {rightSidebarContent === 'service' ? 'Service Details' : 'AI Review'}
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRightSidebarOpen(false)}
+              className="h-8 w-8 p-0"
+            >
+              ×
+            </Button>
+          </div>
+
+          {/* Service Details Content */}
+          {rightSidebarContent === 'service' && (
+            <ServiceDetails selectedNode={selectedNode} connections={connections} />
+          )}
+
+          {/* AI Review Content */}
+          {rightSidebarContent === 'ai-review' && (
+            <div className="space-y-4">
+              {reviewCacheKey ? (
+                <>
+                  {/* Controls */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium">Filter:</label>
+                      <select 
+                        className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-1 focus:ring-ring"
+                        value={severityFilter}
+                        onChange={(e) => setSeverityFilter(e.target.value as any)}
+                      >
+                        <option value="all">All</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                        <option value="info">Info</option>
+                      </select>
+                    </div>
+                    {review && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHighlightedNodes([])}
+                          className="text-xs"
+                        >
+                          Clear
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            try {
+                              navigator.clipboard.writeText(JSON.stringify(review, null, 2))
+                            } catch {}
+                          }}
+                          className="text-xs"
+                        >
+                          Copy
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const blob = new Blob([JSON.stringify(review, null, 2)], { type: 'application/json' })
+                            const url = URL.createObjectURL(blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = `ai-review-${reviewCacheKey}.json`
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            URL.revokeObjectURL(url)
+                          }}
+                          className="text-xs"
+                        >
+                          Export
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {runFinished ? (
+                    reviewStatus === 'ready' && review ? (
+                      <div className="space-y-4 max-h-[calc(100vh-12rem)] overflow-auto">
+                        {/* Summary Card */}
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">Summary</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-sm text-muted-foreground">{review.summary}</p>
+                          </CardContent>
+                        </Card>
+
+                        {/* Recommendations */}
+                        {Array.isArray(review.recommendations) && review.recommendations.length > 0 && (
+                          <Card>
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base">Recommendations</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <ul className="space-y-2">
+                                {review.recommendations.slice(0,5).map((r: string, i: number) => (
+                                  <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                                    <span className="text-primary mt-1">•</span>
+                                    <span>{r}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Findings */}
+                        {Array.isArray(review.findings) && review.findings.length > 0 && (
+                          <Card>
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-base">
+                                Findings ({review.findings.filter((f: any) => severityFilter === 'all' || (f.severity || 'info').toLowerCase() === severityFilter).length})
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-3">
+                                {review.findings
+                                  .filter((f: any) => severityFilter === 'all' || (f.severity || 'info').toLowerCase() === severityFilter)
+                                  .sort((a: any, b: any) => {
+                                    const order = { critical: 5, high: 4, medium: 3, low: 2, info: 1 } as any
+                                    return (order[(b.severity||'info').toLowerCase()]||0) - (order[(a.severity||'info').toLowerCase()]||0)
+                                  })
+                                  .slice(0, 15)
+                                  .map((f: any) => {
+                                    const sev = (f.severity || 'info').toLowerCase()
+                                    const sevVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+                                      critical: 'destructive',
+                                      high: 'destructive',
+                                      medium: 'default',
+                                      low: 'secondary',
+                                      info: 'outline'
+                                    }
+                                    return (
+                                      <Card
+                                        key={f.id}
+                                        className="cursor-pointer transition-colors hover:bg-accent/50 border-l-4"
+                                        style={{
+                                          borderLeftColor: sev === 'critical' ? '#ef4444' : 
+                                                         sev === 'high' ? '#f97316' : 
+                                                         sev === 'medium' ? '#eab308' : 
+                                                         sev === 'low' ? '#3b82f6' : '#64748b'
+                                        }}
+                                        onClick={() => setHighlightedNodes(Array.isArray(f.nodes) ? f.nodes : [])}
+                                      >
+                                        <CardContent className="p-4">
+                                          <div className="flex items-start justify-between gap-2 mb-2">
+                                            <Badge variant={sevVariants[sev]} className="text-xs">
+                                              {f.severity || 'info'}
+                                            </Badge>
+                                            {Array.isArray(f.nodes) && f.nodes.length > 0 && (
+                                              <Badge variant="outline" className="text-xs">
+                                                {f.nodes.length} node{f.nodes.length !== 1 ? 's' : ''}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <h4 className="font-medium text-sm mb-1">{f.message}</h4>
+                                          {f.details && (
+                                            <p className="text-xs text-muted-foreground mb-2">{f.details}</p>
+                                          )}
+                                          {Array.isArray(f.references) && f.references.length > 0 && (
+                                            <div className="flex flex-wrap gap-1">
+                                              {f.references.slice(0,2).map((url: string, i: number) => (
+                                                <Button
+                                                  key={i}
+                                                  variant="link"
+                                                  size="sm"
+                                                  className="h-auto p-0 text-xs"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    window.open(url, '_blank')
+                                                  }}
+                                                >
+                                                  Doc {i+1}
+                                                </Button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </CardContent>
+                                      </Card>
+                                    )
+                                  })
+                                }
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    ) : reviewStatus === 'pending' ? (
+                      <Card>
+                        <CardContent className="p-6 text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                          <p className="text-sm text-muted-foreground">Analyzing architecture...</p>
+                        </CardContent>
+                      </Card>
+                    ) : reviewStatus === 'error' ? (
+                      <Card>
+                        <CardContent className="p-6 text-center">
+                          <p className="text-sm text-destructive">Failed to load review. Please try again.</p>
+                        </CardContent>
+                      </Card>
+                    ) : null
+                  ) : (
+                    <Card>
+                      <CardContent className="p-6 text-center">
+                        <p className="text-sm text-muted-foreground">Click Run to analyze your architecture</p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="p-6 text-center">
+                    <p className="text-sm text-muted-foreground">Load a graph or scan to enable AI review</p>
+                  </CardContent>
+                </Card>
               )}
             </div>
-            {runFinished ? (
-              reviewStatus === 'ready' && review ? (
-                <div className="p-3 bg-muted rounded-lg space-y-2 max-h-[75vh] overflow-auto">
-                  <div className="text-sm font-medium">Summary</div>
-                  <div className="text-sm text-muted-foreground">{review.summary}</div>
-                  {Array.isArray(review.recommendations) && review.recommendations.length > 0 && (
-                    <div className="text-sm">
-                      <div className="font-medium mt-2">Recommendations</div>
-                      <ul className="list-disc pl-5 mt-1 space-y-1">
-                        {review.recommendations.slice(0,5).map((r: string, i: number) => (
-                          <li key={i} className="text-muted-foreground">{r}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {Array.isArray(review.findings) && review.findings.length > 0 && (
-                    <div className="text-sm">
-                      <div className="font-medium mt-2">Findings ({review.findings.length})</div>
-                      <div className="mt-1 space-y-2">
-                        {review.findings
-                          .filter((f: any) => severityFilter === 'all' || (f.severity || 'info').toLowerCase() === severityFilter)
-                          .sort((a: any, b: any) => {
-                            const order = { critical: 5, high: 4, medium: 3, low: 2, info: 1 } as any
-                            return (order[(b.severity||'info').toLowerCase()]||0) - (order[(a.severity||'info').toLowerCase()]||0)
-                          })
-                          .slice(0, 15)
-                          .map((f: any) => {
-                            const sev = (f.severity || 'info').toLowerCase()
-                            const sevStyles: Record<string, string> = {
-                              critical: 'bg-red-100 text-red-800 border-red-200',
-                              high: 'bg-orange-100 text-orange-800 border-orange-200',
-                              medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-                              low: 'bg-blue-100 text-blue-800 border-blue-200',
-                              info: 'bg-slate-100 text-slate-800 border-slate-200'
-                            }
-                            return (
-                              <button
-                                key={f.id}
-                                className={`w-full text-left p-2 rounded border bg-background hover:bg-accent/50`}
-                                onClick={() => setHighlightedNodes(Array.isArray(f.nodes) ? f.nodes : [])}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${sevStyles[sev] || sevStyles.info}`}>
-                                    {f.severity || 'info'}
-                                  </span>
-                                  {Array.isArray(f.nodes) && f.nodes.length > 0 && (
-                                    <span className="text-[10px] text-muted-foreground">{f.nodes.length} node(s)</span>
-                                  )}
-                                </div>
-                                <div className="text-sm font-medium mt-1">{f.message}</div>
-                                {f.details && (
-                                  <div className="text-xs text-muted-foreground mt-1">{f.details}</div>
-                                )}
-                                {Array.isArray(f.references) && f.references.length > 0 && (
-                                  <div className="mt-1 flex flex-wrap gap-2">
-                                    {f.references.slice(0,2).map((url: string, i: number) => (
-                                      <a key={i} href={url} target="_blank" rel="noreferrer" className="text-xs underline text-blue-600">
-                                        Doc {i+1}
-                                      </a>
-                                    ))}
-                                  </div>
-                                )}
-                              </button>
-                            )
-                          })
-                        }
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : reviewStatus === 'pending' ? (
-                <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">Review in progress…</div>
-              ) : reviewStatus === 'error' ? (
-                <div className="p-3 bg-muted rounded-lg text-sm text-destructive">Failed to load review.</div>
-              ) : null
-            ) : (
-              <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">Run simulation to view results</div>
-            )}
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground">Load a graph or scan to enable AI review.</div>
-
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

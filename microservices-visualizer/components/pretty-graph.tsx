@@ -15,11 +15,7 @@ import {
   Workflow,
   Cloud
 } from "lucide-react"
-// Import GSAP only on client side to avoid SSR issues
-let gsap: any = null
-if (typeof window !== 'undefined') {
-  gsap = require('gsap')
-}
+import gsap from "gsap"
 
 interface PrettyGraphProps {
   services: MicroserviceNode[]
@@ -153,7 +149,7 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId, onRunC
 
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
-  const [helpOpen, setHelpOpen] = useState(true)
+  const [helpOpen, setHelpOpen] = useState(false)
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null)
   const zoomBehaviorRef = useRef<any>(null)
   const containerRef = useRef<SVGGElement | null>(null)
@@ -166,6 +162,11 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId, onRunC
   const isAnimatingRef = useRef<boolean>(false)
   const gsapTweensRef = useRef<any[]>([])
   const lastHighlightRef = useRef<string[]>([])
+  const onRunCompleteRef = useRef<typeof onRunComplete>(onRunComplete)
+
+  useEffect(() => {
+    onRunCompleteRef.current = onRunComplete
+  }, [onRunComplete])
 
   // Keep ref in sync without reinitializing the graph
   useEffect(() => {
@@ -813,245 +814,328 @@ export function PrettyGraph({ services, connections, onNodeSelect, runId, onRunC
   useEffect(() => {
     if (!svgRef.current) return
     if (!runId) return
-    if (!linksRef.current.length) return
     if (isAnimatingRef.current) return
-    if (!gsap) return // Skip animation if GSAP not available
+    if (!gsap) return
 
-    isAnimatingRef.current = true
+    let cancelled = false
+    let completed = false
 
-    const container = select(containerRef.current)
-    const linkSel = linkSelRef.current as Selection<SVGLineElement, GraphLink, any, any>
-    const nodeSel = nodeSelRef.current as Selection<SVGGElement, GraphNode, any, any>
-    if (!linkSel || !container || !nodeSel) {
+    const fireRunComplete = () => {
+      const cb = onRunCompleteRef.current
+      if (!cb) return
+      try { cb() } catch {}
+    }
+
+    const cleanupAnimation = () => {
+      gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
+      gsapTweensRef.current = []
+      try {
+        if (containerRef.current) {
+          const current = select(containerRef.current)
+          current.selectAll("circle.__runDot").remove()
+          current.selectAll("mask[id^='lineMask_']").remove()
+        }
+      } catch {}
+      const wasAnimating = isAnimatingRef.current
       isAnimatingRef.current = false
-      return
     }
 
-    // Kill any previous tweens
-    gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
-    gsapTweensRef.current = []
-
-    console.log("🎬 Starting run animation - resetting graph...")
-
-    // Reset visibility
-    linkSel
-      .attr("filter", null)
-      .attr("stroke-opacity", 0)
-      .attr("marker-end", null)
-    nodeSel.style("opacity", 0)
-
-    // Build adjacency
-    const links = linksRef.current
-    const nodes = nodesRef.current
-
-    const adjacency = new Map<string, GraphLink[]>()
-    for (const l of links) {
-      if (!adjacency.has(l.source.id)) adjacency.set(l.source.id, [])
-      adjacency.get(l.source.id)!.push(l)
+    const waitForSelections = async () => {
+      const expectedLinkCount = linksRef.current.length
+      const expectedNodeCount = nodesRef.current.length
+      console.log('⏳ Waiting for selections. Expected nodes:', expectedNodeCount, 'links:', expectedLinkCount)
+      const start = performance.now()
+      while (!cancelled) {
+        const containerNode = containerRef.current
+        const linkSel = linkSelRef.current as Selection<SVGLineElement, GraphLink, any, any> | undefined
+        const nodeSel = nodeSelRef.current as Selection<SVGGElement, GraphNode, any, any> | undefined
+        const expectedLinkCount = linksRef.current.length
+        const expectedNodeCount = nodesRef.current.length
+        const linksReady = expectedLinkCount === 0 || (linkSel && !linkSel.empty())
+        const nodesReady = expectedNodeCount === 0 || (nodeSel && !nodeSel.empty())
+        if (containerNode && linkSel && nodeSel && linksReady && nodesReady) {
+          return { containerNode, linkSel, nodeSel }
+        }
+        if (!containerNode) {
+          console.log('⏳ Waiting: container missing')
+        } else {
+          console.log('⏳ Waiting: linkSel empty?', !linkSel || linkSel.empty(), 'nodeSel empty?', !nodeSel || nodeSel.empty())
+        }
+        if (performance.now() - start > 1500) break
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      }
+      return null
     }
 
-    const indegrees = new Map(nodes.map(n => [n.id, 0]))
-    links.forEach(l => {
-      indegrees.set(l.target.id, (indegrees.get(l.target.id) || 0) + 1)
-    })
+    const runAnimation = async () => {
+      const ready = await waitForSelections()
+      if (!ready || cancelled) return
 
-    let roots = nodes.filter(n => (indegrees.get(n.id) || 0) === 0).map(n => n.id)
+      const { containerNode, linkSel, nodeSel } = ready
+      console.log('✅ Selections ready. Starting animation now.')
+      isAnimatingRef.current = true
 
-    roots = roots.sort((a, b) => {
-      const aNode = nodes.find(n => n.id === a)!
-      const bNode = nodes.find(n => n.id === b)!
-      const aScore = (getServiceType(aNode) === 'api' ? 1 : 0) + (a.toLowerCase().includes('api') ? 1 : 0)
-      const bScore = (getServiceType(bNode) === 'api' ? 1 : 0) + (b.toLowerCase().includes('api') ? 1 : 0)
-      return bScore - aScore
-    })
+      const container = select(containerNode)
 
-    const allBfsEdges: GraphLink[] = []
-    const globalVisited = new Set<string>()
-    for (const root of roots) {
-      if (globalVisited.has(root)) continue
-      const q: string[] = [root]
-      const localVisited = new Set<string>([root])
-      globalVisited.add(root)
-      const componentEdges: GraphLink[] = []
-      while (q.length) {
-        const current = q.shift()!
-        const outgoing = (adjacency.get(current) || []).filter((e: GraphLink) => !componentEdges.includes(e))
-        for (const e of outgoing) {
-          componentEdges.push(e)
-          if (!localVisited.has(e.target.id)) {
-            localVisited.add(e.target.id)
-            globalVisited.add(e.target.id)
-            q.push(e.target.id)
+      try { console.log('▶️ run animation', { runId, nodes: nodesRef.current.length, links: linksRef.current.length }) } catch {}
+
+      gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
+      gsapTweensRef.current = []
+
+      console.log("🎬 Starting run animation - resetting graph...")
+
+      linkSel
+        .attr("filter", null)
+        .attr("stroke-opacity", 0)
+        .attr("marker-end", null)
+      nodeSel.style("opacity", 0)
+
+      // Give a tiny pause so users see the reset before the sequence starts
+      await new Promise(resolve => setTimeout(resolve, 150))
+
+      const links = linksRef.current
+      const nodes = nodesRef.current
+
+      const adjacency = new Map<string, GraphLink[]>()
+      for (const l of links) {
+        if (!adjacency.has(l.source.id)) adjacency.set(l.source.id, [])
+        adjacency.get(l.source.id)!.push(l)
+      }
+
+      const indegrees = new Map(nodes.map(n => [n.id, 0]))
+      links.forEach(l => {
+        indegrees.set(l.target.id, (indegrees.get(l.target.id) || 0) + 1)
+      })
+
+      let roots = nodes.filter(n => (indegrees.get(n.id) || 0) === 0).map(n => n.id)
+
+      roots = roots.sort((a, b) => {
+        const aNode = nodes.find(n => n.id === a)!
+        const bNode = nodes.find(n => n.id === b)!
+        const aScore = (getServiceType(aNode) === 'api' ? 1 : 0) + (a.toLowerCase().includes('api') ? 1 : 0)
+        const bScore = (getServiceType(bNode) === 'api' ? 1 : 0) + (b.toLowerCase().includes('api') ? 1 : 0)
+        return bScore - aScore
+      })
+
+      if (roots.length === 0) {
+        const apiCandidates = nodes.filter(n => getServiceType(n) === 'api')
+        if (apiCandidates.length > 0) roots = [apiCandidates[0].id]
+        else if (nodes.length > 0) roots = [nodes[0].id]
+      }
+
+      const allBfsEdges: GraphLink[] = []
+      const globalVisited = new Set<string>()
+      for (const root of roots) {
+        if (globalVisited.has(root)) continue
+        const q: string[] = [root]
+        const localVisited = new Set<string>([root])
+        globalVisited.add(root)
+        const componentEdges: GraphLink[] = []
+        while (q.length) {
+          const current = q.shift()!
+          const outgoing = (adjacency.get(current) || []).filter((e: GraphLink) => !componentEdges.includes(e))
+          for (const e of outgoing) {
+            componentEdges.push(e)
+            if (!localVisited.has(e.target.id)) {
+              localVisited.add(e.target.id)
+              globalVisited.add(e.target.id)
+              q.push(e.target.id)
+            }
           }
         }
+        allBfsEdges.push(...componentEdges)
       }
-    allBfsEdges.push(...componentEdges)
-  }
 
-  const revealed = new Set<string>()
+      const revealed = new Set<string>()
 
-  const waitForLayoutStability = async () => {
-      const sim = simulationRef.current
-      if (!sim) return
-      const start = Date.now()
-      while (sim.alpha() > 0.06 && Date.now() - start < 2000) {
-        await new Promise(r => setTimeout(r, 50))
-      }
-    }
-
-    const fadeInNode = async (nodeId: string) => {
-      if (revealed.has(nodeId)) return
-      revealed.add(nodeId)
-      const els = nodeSel.filter((d: any) => d.id === nodeId).nodes()
-      if (els.length === 0) return
-      await new Promise<void>((resolve) => {
-        const tween = gsap.to(els, { duration: 0.4, opacity: 1, ease: "power2.out", onComplete: () => resolve() })
-        gsapTweensRef.current.push(tween)
-      })
-    }
-
-  const animateEdge = async (edge: GraphLink) => {
-    const lineEl = linkSel.filter((d: any) => d === edge).nodes()[0] as SVGLineElement
-    if (!lineEl) return
-
-    const read = (attr: string) => parseFloat(lineEl.getAttribute(attr) || '0')
-    const sx = read('x1')
-    const sy = read('y1')
-    const tx = read('x2')
-    const ty = read('y2')
-
-    // Start with line invisible
-    select(lineEl)
-      .attr("stroke-opacity", 0)
-      .attr("marker-end", null)
-
-    // Create a mask for line drawing effect
-    const lineLength = Math.sqrt((tx - sx) ** 2 + (ty - sy) ** 2)
-    const lineDef = container.select("defs")
-    if (lineDef.empty()) {
-      container.append("defs")
-    }
-    
-    const maskId = `lineMask_${Math.random().toString(36).substr(2, 9)}`
-    const mask = container.select("defs").append("mask").attr("id", maskId)
-    
-    const maskRect = mask.append("rect")
-      .attr("x", sx)
-      .attr("y", sy - 10)
-      .attr("width", 0)
-      .attr("height", 20)
-      .attr("fill", "white")
-      .attr("transform", `rotate(${Math.atan2(ty - sy, tx - sx) * 180 / Math.PI} ${sx} ${sy})`)
-
-    select(lineEl).attr("mask", `url(#${maskId})`)
-
-    // Create simple, clean traveling dot
-    const dot = (container.append("circle") as any)
-      .attr("class", "__runDot")
-      .attr("r", 3)
-      .attr("fill", "#1f2937")
-      .attr("cx", sx)
-      .attr("cy", sy)
-      .style("filter", "drop-shadow(0 1px 2px rgba(0,0,0,0.1))")
-      .node() as SVGCircleElement
-
-    await new Promise<void>((resolve) => {
-      // Create timeline for smooth coordinated animation
-      const tl = gsap.timeline({
-        onComplete: () => {
-          // Clean up
-          try { 
-            select(dot).remove()
-            mask.remove()
-          } catch {}
-          // Show final clean line state
-          select(lineEl)
-            .attr("mask", null)
-            .attr("stroke-opacity", 0.7)
-            .attr("marker-end", "url(#arrowhead)")
-          resolve()
+      const waitForLayoutStability = async () => {
+        const sim = simulationRef.current
+        if (!sim) return
+        const start = Date.now()
+        while (sim.alpha() > 0.06 && Date.now() - start < 2000) {
+          await new Promise(r => setTimeout(r, 50))
         }
-      })
+      }
 
-      // Step 1: Draw the line smoothly
-      tl.to(lineEl, { 
-        duration: 0.6, 
-        attr: { "stroke-opacity": 0.6 }, 
-        ease: "power1.out" 
-      }, 0)
-      
-      tl.to(maskRect.node(), { 
-        duration: 0.6, 
-        attr: { width: lineLength }, 
-        ease: "power1.out" 
-      }, 0)
+      const fadeInNode = async (nodeId: string) => {
+        if (revealed.has(nodeId)) return
+        revealed.add(nodeId)
+        const groupSel = nodeSel.filter((d: any) => d.id === nodeId)
+        if (groupSel.empty()) return
+        const groupNodes = groupSel.nodes()
+        const rectNodes = groupSel.selectAll('rect').nodes()
+        const iconNodes = groupSel.selectAll('image').nodes()
+        const labelNodes = groupSel.selectAll('text').nodes()
+        await new Promise<void>((resolve) => {
+          const tl = gsap.timeline({ onComplete: () => resolve() })
+          tl.to(groupNodes, { duration: 0.42, opacity: 1, ease: "power2.out" }, 0)
+          if (rectNodes.length > 0) {
+            tl.fromTo(rectNodes, 
+              { scale: 0.65, transformOrigin: "50% 50%" },
+              { duration: 0.5, scale: 1, ease: "back.out(1.5)" },
+              0
+            )
+          }
+          if (iconNodes.length > 0) {
+            tl.fromTo(iconNodes, 
+              { scale: 0.6, opacity: 0, transformOrigin: "50% 50%" },
+              { duration: 0.45, scale: 1, opacity: 1, ease: "back.out(1.4)" },
+              0.05
+            )
+          }
+          if (labelNodes.length > 0) {
+            tl.fromTo(labelNodes, 
+              { opacity: 0, y: 8 },
+              { duration: 0.35, opacity: 1, y: 0, ease: "power2.out" },
+              0.12
+            )
+          }
+          gsapTweensRef.current.push(tl)
+        })
+      }
 
-      // Step 2: Dot travels smoothly along the line
-      tl.to(dot, {
-        duration: 0.8,
-        attr: { cx: tx, cy: ty },
-        ease: "power1.inOut"
-      }, 0.3)
+      const animateEdge = async (edge: GraphLink) => {
+        const lineEl = linkSel.filter((d: any) => d === edge).nodes()[0] as SVGLineElement
+        if (!lineEl) return
 
-      // Step 3: Subtle arrival indication
-      tl.to(dot, {
-        duration: 0.15,
-        attr: { r: 4 },
-        ease: "power2.out"
-      }, 1.0)
+        const read = (attr: string) => parseFloat(lineEl.getAttribute(attr) || '0')
+        const sx = read('x1')
+        const sy = read('y1')
+        const tx = read('x2')
+        const ty = read('y2')
+        const originalStrokeWidth = parseFloat(lineEl.getAttribute('stroke-width') || '2')
 
-      tl.to(dot, {
-        duration: 0.15,
-        attr: { r: 3 },
-        ease: "power2.out"
-      }, 1.15)
+        select(lineEl)
+          .attr("stroke-opacity", 0)
+          .attr("marker-end", null)
 
-      // Step 4: Show arrow marker
-      tl.to(lineEl, {
-        duration: 0.1,
-        attr: { "marker-end": "url(#arrowhead)" },
-        ease: "none"
-      }, 0.7)
+        const lineLength = Math.sqrt((tx - sx) ** 2 + (ty - sy) ** 2)
+        const lineDef = container.select("defs")
+        if (lineDef.empty()) {
+          container.append("defs")
+        }
 
-      gsapTweensRef.current.push(tl)
-    })
-  }
+        const maskId = `lineMask_${Math.random().toString(36).substr(2, 9)}`
+        const mask = container.select("defs").append("mask").attr("id", maskId)
 
-    // Now animate allBfsEdges sequentially
-    ;(async () => {
-      // Ensure nodes/links are settled so coordinates line up with rendered lines
+        const maskRect = mask.append("rect")
+          .attr("x", sx)
+          .attr("y", sy - 10)
+          .attr("width", 0)
+          .attr("height", 20)
+          .attr("fill", "white")
+          .attr("transform", `rotate(${Math.atan2(ty - sy, tx - sx) * 180 / Math.PI} ${sx} ${sy})`)
+
+        select(lineEl).attr("mask", `url(#${maskId})`)
+
+        const dot = (container.append("circle") as any)
+          .attr("class", "__runDot")
+          .attr("r", 3)
+          .attr("fill", "#1f2937")
+          .attr("cx", sx)
+          .attr("cy", sy)
+          .style("filter", "drop-shadow(0 1px 2px rgba(0,0,0,0.1))")
+          .node() as SVGCircleElement
+
+        await new Promise<void>((resolve) => {
+          const tl = gsap.timeline({
+            onComplete: () => {
+              try {
+                select(dot).remove()
+                mask.remove()
+              } catch {}
+              select(lineEl)
+                .attr("mask", null)
+                .attr("stroke-opacity", 0.7)
+                .attr("marker-end", "url(#arrowhead)")
+              resolve()
+            }
+          })
+
+          tl.to(lineEl, {
+            duration: 0.6,
+            attr: { "stroke-opacity": 0.6 },
+            ease: "power1.out"
+          }, 0)
+
+          tl.to(maskRect.node(), {
+            duration: 0.6,
+            attr: { width: lineLength },
+            ease: "power1.out"
+          }, 0)
+
+          tl.to(dot, {
+            duration: 0.8,
+            attr: { cx: tx, cy: ty },
+            ease: "power1.inOut"
+          }, 0.3)
+
+          tl.to(dot, {
+            duration: 0.15,
+            attr: { r: 4 },
+            ease: "power2.out"
+          }, 1.0)
+
+          tl.to(dot, {
+            duration: 0.15,
+            attr: { r: 3 },
+            ease: "power2.out"
+          }, 1.15)
+
+          tl.to(lineEl, {
+            duration: 0.25,
+            attr: { "stroke-width": originalStrokeWidth + 1.2 },
+            ease: "power1.out"
+          }, 0.6)
+
+          tl.to(lineEl, {
+            duration: 0.25,
+            attr: { "stroke-width": originalStrokeWidth },
+            ease: "power1.in"
+          }, 1.05)
+
+          tl.to(lineEl, {
+            duration: 0.1,
+            attr: { "marker-end": "url(#arrowhead)" },
+            ease: "none"
+          }, 0.7)
+
+          gsapTweensRef.current.push(tl)
+        })
+      }
+
       await waitForLayoutStability()
-      // Reveal all roots first
       for (const root of roots) {
         await fadeInNode(root)
       }
-    for (const e of allBfsEdges) {
-      await fadeInNode(e.source.id)
-      // Start edge animation and target reveal simultaneously when dot arrives
-      const edgePromise = animateEdge(e)
-      // Wait for dot to arrive, then reveal target smoothly
-      setTimeout(() => fadeInNode(e.target.id), 700)
-      await edgePromise
-    }
-      // Restore default visuals
+      for (const e of allBfsEdges) {
+        await fadeInNode(e.source.id)
+        const edgePromise = animateEdge(e)
+        setTimeout(() => fadeInNode(e.target.id), 700)
+        await edgePromise
+      }
+      for (const n of nodes) {
+        if (!revealed.has(n.id)) {
+          await fadeInNode(n.id)
+        }
+      }
+
       linkSel
         .attr("filter", null)
         .attr("stroke-opacity", 0.7)
         .attr("marker-end", "url(#arrowhead)")
       nodeSel.style("opacity", 1)
+      completed = true
       isAnimatingRef.current = false
-      try { onRunComplete && onRunComplete() } catch {}
-    })()
-      
+      console.log('✅ Run animation completed')
+      fireRunComplete()
+    }
+
+    runAnimation()
+
     return () => {
-      gsapTweensRef.current.forEach(t => { try { t.kill() } catch {} })
-      gsapTweensRef.current = []
-      try { 
-        container.selectAll("circle.__runDot").remove()
-        container.selectAll("mask[id^='lineMask_']").remove()
-      } catch {}
-      isAnimatingRef.current = false
-      try { onRunComplete && onRunComplete() } catch {}
+      cancelled = true
+      cleanupAnimation()
     }
   }, [runId])
 
