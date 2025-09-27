@@ -54,6 +54,7 @@ export default function HomePage() {
   const [rightSidebarOpen, setRightSidebarOpen] = useState<boolean>(false)
   const [rightSidebarContent, setRightSidebarContent] = useState<'service' | 'ai-review'>('service')
   const [graphVersion, setGraphVersion] = useState<number>(0)
+  const [isGraphLoading, setIsGraphLoading] = useState<boolean>(false)
 
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
@@ -155,6 +156,7 @@ export default function HomePage() {
 
   const loadAiGraph = async () => {
     try {
+      setIsGraphLoading(true)
       console.log('Loading latest cached graph...')
       const res = await fetch('/api/cdk-scan-files/latest')
       if (res.ok) {
@@ -163,6 +165,7 @@ export default function HomePage() {
           const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(latest.graph)
           setServices(mappedServices)
           setConnections(mappedConnections)
+          setGraphVersion(v => v + 1)
           if (latest.cacheKey) {
             console.log('🔑 Setting review cache key:', latest.cacheKey)
             setReviewCacheKey(latest.cacheKey)
@@ -176,6 +179,7 @@ export default function HomePage() {
       const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(aiGraph)
       setServices(mappedServices)
       setConnections(mappedConnections)
+      setGraphVersion(v => v + 1)
     } catch (error) {
       console.error('Failed to load AI graph:', error)
       if (error instanceof Error) {
@@ -183,6 +187,8 @@ export default function HomePage() {
       } else {
         alert('❌ Failed to load graph. Check console for details.')
       }
+    } finally {
+      setIsGraphLoading(false)
     }
   }
 
@@ -272,7 +278,32 @@ export default function HomePage() {
 
         {/* Actions */}
         <div className="space-y-2 pt-4 border-t">
-              <Button onClick={loadAiGraph} className="w-full" variant="default">
+              <Button
+                onClick={async () => {
+                  const recordId = crypto.randomUUID()
+                  console.log('⚙️ Button: Load Graph (start)', {
+                    recordId,
+                    runId,
+                    graphVersion,
+                    servicesCount: services.length,
+                    connectionsCount: connections.length,
+                    reviewCacheKey,
+                    runFinished
+                  })
+                  await loadAiGraph()
+                  console.log('✅ Button: Load Graph (end)', {
+                    recordId,
+                    runId,
+                    graphVersion,
+                    servicesCount: services.length,
+                    connectionsCount: connections.length,
+                    reviewCacheKey,
+                    runFinished
+                  })
+                }}
+                className="w-full"
+                variant="default"
+              >
                 <Zap className="h-4 w-4 mr-2" />
                 Load Graph
               </Button>
@@ -312,37 +343,46 @@ export default function HomePage() {
             <div className="flex items-center gap-2">
               <Button
                 onClick={async () => {
+                  const recordId = crypto.randomUUID()
+                  console.log('⚙️ Button: Run (start)', {
+                    recordId,
+                    runId,
+                    graphVersion,
+                    servicesCount: services.length,
+                    connectionsCount: connections.length,
+                    reviewCacheKey,
+                    runFinished
+                  })
                   // Reset states and show AI review sidebar
-                  console.log('🚀 Run button clicked - resetting states')
                   setRunFinished(false)
                   setHighlightedNodes([])
                   setRightSidebarContent('ai-review')
                   setRightSidebarOpen(true)
-                  let graphReady = services.length > 0
-                  if (!graphReady) {
-                    console.log('📊 No graph data loaded yet. Loading before animation...')
-                    await loadAiGraph()
-                    // wait a frame for state updates to render
-                    await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)))
-                    graphReady = true
-                  } else {
-                    console.log('✅ Using in-memory graph for animation (no reload)')
-                  }
+                  console.log('📊 Reloading graph data before animation (matching Load Graph flow)...', { recordId })
+                  await loadAiGraph()
+                  console.log('📊 Button: Run after loadAiGraph', {
+                    recordId,
+                    runId,
+                    graphVersion,
+                    servicesCount: services.length,
+                    connectionsCount: connections.length
+                  })
+                  // wait a frame for state updates to render
+                  await new Promise(resolve => requestAnimationFrame(() => resolve(undefined)))
+                  // Give PrettyGraph time to rebuild its d3 structure (mirrors the natural delay after Load Graph)
+                  await new Promise(resolve => setTimeout(resolve, 120))
 
-                  if (graphReady) {
-                    requestAnimationFrame(() => {
-                      const newRunId = (runId || 0) + 1
-                      console.log('🎬 Triggering animation with runId:', newRunId)
-                      setGraphVersion((v) => v + 1)
-                      setRunId(newRunId)
-                    })
-                  }
+                  requestAnimationFrame(() => {
+                    const newRunId = (runId || 0) + 1
+                    console.log('🎬 Triggering animation with runId:', { recordId, newRunId, prevRunId: runId })
+                    setRunId(newRunId)
+                  })
                   
                   // Ensure we have a cacheKey; if not, try latest
                   let key = reviewCacheKey
-                  console.log('🔑 Current reviewCacheKey:', key)
+                  console.log('🔑 Current reviewCacheKey:', { recordId, key })
                   if (!key) {
-                    console.log('⚠️ No cache key found, fetching latest...')
+                    console.log('⚠️ No cache key found, fetching latest...', { recordId })
                     try {
                       const r = await fetch('/api/cdk-scan-files/latest')
                       if (r.ok) {
@@ -397,6 +437,15 @@ export default function HomePage() {
                       setRunFinished(false)
                     }
                   }
+                  console.log('✅ Button: Run (end)', {
+                    recordId,
+                    runId,
+                    graphVersion,
+                    servicesCount: services.length,
+                    connectionsCount: connections.length,
+                    reviewCacheKey,
+                    runFinished
+                  })
                 }}
                 variant="default"
               >
@@ -407,7 +456,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 relative">
           {services.length > 0 ? (
             <PrettyGraph 
               key={graphVersion}
@@ -433,6 +482,12 @@ export default function HomePage() {
                   </p>
                 </div>
               </div>
+            </div>
+          )}
+          {isGraphLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-sm z-10">
+              <div className="animate-spin h-10 w-10 rounded-full border-2 border-white border-t-transparent mb-3"></div>
+              <p className="text-white text-sm font-medium">Preparing architecture animation...</p>
             </div>
           )}
         </div>
@@ -675,3 +730,61 @@ export default function HomePage() {
     </div>
   )
 }
+  const loadAiGraph = async () => {
+    const recordId = crypto.randomUUID()
+    try {
+      console.log('📥 loadAiGraph start', {
+        recordId,
+        runId,
+        graphVersion,
+        servicesCount: services.length,
+        connectionsCount: connections.length,
+        reviewCacheKey
+      })
+      setIsGraphLoading(true)
+      console.log('Loading latest cached graph...')
+      const res = await fetch('/api/cdk-scan-files/latest')
+      if (res.ok) {
+        const latest = await res.json()
+        if (latest?.graph) {
+          const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(latest.graph)
+          setServices(mappedServices)
+          setConnections(mappedConnections)
+          setGraphVersion(v => v + 1)
+          console.log('📥 loadAiGraph cached result', {
+            recordId,
+            servicesCount: mappedServices.length,
+            connectionsCount: mappedConnections.length,
+            cacheKey: latest.cacheKey
+          })
+          if (latest.cacheKey) {
+            console.log('🔑 Setting review cache key:', latest.cacheKey)
+            setReviewCacheKey(latest.cacheKey)
+          }
+          return
+        }
+      }
+      // Fallback to bundled sample if no cache
+      console.log('No cached graph found. Falling back to sample file.', { recordId })
+      const aiGraph = await loadGraphFromFile('/graph_v4_final.json')
+      const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(aiGraph)
+      setServices(mappedServices)
+      setConnections(mappedConnections)
+      setGraphVersion(v => v + 1)
+      console.log('📥 loadAiGraph fallback result', {
+        recordId,
+        servicesCount: mappedServices.length,
+        connectionsCount: mappedConnections.length
+      })
+    } catch (error) {
+      console.error('Failed to load AI graph:', error)
+      if (error instanceof Error) {
+        alert(`❌ Failed to load graph: ${error.message}\n\nMake sure the app is running on the correct port and try refreshing the page.`)
+      } else {
+        alert('❌ Failed to load graph. Check console for details.')
+      }
+    } finally {
+      setIsGraphLoading(false)
+      console.log('📥 loadAiGraph end', { recordId })
+    }
+  }
