@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PrettyGraph } from "@/components/pretty-graph"
+import { FolderSelector } from "@/components/folder-selector"
 import { loadGraphFromFile, mapAiGraphToUiFormat } from "@/lib/graph-mapper"
 import type { MicroserviceNode, ServiceConnection } from "@/lib/file-analyzer"
 import { 
@@ -34,6 +35,19 @@ export default function HomePage() {
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
     setSelectedNode(node)
+  }
+
+  const handleGraphGenerated = (aiGraph: any) => {
+    try {
+      console.log('CDK Graph generated:', aiGraph)
+      const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(aiGraph)
+      console.log('Mapped CDK services:', mappedServices.length, 'connections:', mappedConnections.length)
+      setServices(mappedServices)
+      setConnections(mappedConnections)
+    } catch (error) {
+      console.error('Failed to map CDK graph:', error)
+      alert(`❌ Failed to process CDK graph: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   const loadAiGraph = async () => {
@@ -117,6 +131,11 @@ export default function HomePage() {
             <Zap className="h-4 w-4 mr-2" />
             Load Sample Graph
           </Button>
+          
+          {/* CDK Folder Scanner */}
+          <div className="pt-2">
+            <FolderSelector onGraphGenerated={handleGraphGenerated} />
+          </div>
           
           <Button onClick={exportGraph} variant="outline" className="w-full">
             Export JSON
