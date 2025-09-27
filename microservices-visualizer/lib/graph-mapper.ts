@@ -1,0 +1,134 @@
+// Graph mapper to convert our AI-generated graph to UI format
+import type { MicroserviceNode, ServiceConnection } from "./file-analyzer"
+
+export interface AiGraphNode {
+  id: string
+  type: "Lambda" | "Table" | "Queue" | "Topic" | "ApiGateway" | "StepFn"
+  label?: string
+  props: Record<string, any>
+}
+
+export interface AiGraphEdge {
+  id: string
+  from: string
+  to: string
+  kind: "invoke" | "publish" | "write" | "read" | "trigger"
+  sync?: boolean
+}
+
+export interface AiGraph {
+  nodes: AiGraphNode[]
+  edges: AiGraphEdge[]
+  meta?: Record<string, any>
+}
+
+// Map AI graph node types to UI service types
+const NODE_TYPE_MAPPING: Record<string, MicroserviceNode["type"]> = {
+  "Lambda": "api",
+  "Table": "database", 
+  "Queue": "queue",
+  "Topic": "queue",
+  "ApiGateway": "api",
+  "StepFn": "api"
+}
+
+// Map AI graph edge kinds to UI connection types
+const EDGE_KIND_MAPPING: Record<string, ServiceConnection["type"]> = {
+  "invoke": "http",
+  "publish": "message",
+  "write": "database",
+  "read": "database", 
+  "trigger": "message"
+}
+
+export function mapAiGraphToUiFormat(aiGraph: AiGraph): {
+  services: MicroserviceNode[]
+  connections: ServiceConnection[]
+} {
+  // Convert nodes
+  const services: MicroserviceNode[] = aiGraph.nodes.map(node => {
+    const uiNode: MicroserviceNode = {
+      id: node.id,
+      name: node.label || node.id,
+      type: NODE_TYPE_MAPPING[node.type] || "external",
+      path: `/services/${node.id}`,
+      dependencies: [],
+      technologies: [node.type],
+      description: generateDescription(node)
+    }
+
+    // Add type-specific properties
+    if (node.type === "Lambda" && node.props.timeoutMs) {
+      uiNode.description += ` (${node.props.timeoutMs}ms timeout)`
+    }
+    
+    if (node.type === "ApiGateway") {
+      uiNode.endpoints = [`/${node.id.toLowerCase()}`]
+      uiNode.port = 443
+    }
+
+    if (node.props.retentionDays) {
+      uiNode.description += ` (${node.props.retentionDays} days retention)`
+    }
+
+    return uiNode
+  })
+
+  // Convert edges to connections
+  const connections: ServiceConnection[] = aiGraph.edges.map(edge => {
+    const connection: ServiceConnection = {
+      from: edge.from,
+      to: edge.to,
+      type: EDGE_KIND_MAPPING[edge.kind] || "http"
+    }
+
+    // Add edge-specific details
+    if (edge.kind === "invoke") {
+      connection.method = "POST"
+      connection.endpoint = `/${edge.to.toLowerCase()}`
+    }
+
+    return connection
+  })
+
+  // Update dependencies based on connections
+  services.forEach(service => {
+    service.dependencies = connections
+      .filter(conn => conn.from === service.id)
+      .map(conn => conn.to)
+  })
+
+  return { services, connections }
+}
+
+function generateDescription(node: AiGraphNode): string {
+  const descriptions: Record<string, string> = {
+    "Lambda": "AWS Lambda Function - Serverless compute service",
+    "Table": "DynamoDB Table - NoSQL database",
+    "Queue": "SQS Queue - Message queue service", 
+    "Topic": "SNS Topic - Notification service",
+    "ApiGateway": "API Gateway - HTTP API endpoint",
+    "StepFn": "Step Functions - Workflow orchestration"
+  }
+
+  let desc = descriptions[node.type] || "AWS Service"
+  
+  if (node.props.billingMode) {
+    desc += ` (${node.props.billingMode})`
+  }
+  
+  return desc
+}
+
+export async function loadGraphFromFile(filePath: string): Promise<AiGraph> {
+  try {
+    const response = await fetch(filePath)
+    if (!response.ok) {
+      throw new Error(`Failed to load graph: ${response.statusText}`)
+    }
+    return await response.json()
+  } catch (error) {
+    console.error("Error loading graph:", error)
+    throw error
+  }
+}

@@ -1,196 +1,164 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
-import { FileUpload } from "@/components/file-upload"
-import { ServiceGraph } from "@/components/service-graph"
-import { ServiceDetails } from "@/components/service-details"
-import { ConnectionEditor } from "@/components/connection-editor"
-import { ServiceEditor } from "@/components/service-editor"
-import { CodeGeneratorPanel } from "@/components/code-generator-panel"
-import { ArchitectureStats } from "@/components/architecture-stats"
-import { ServiceHealthMonitor } from "@/components/service-health-monitor"
-import { QuickActions } from "@/components/quick-actions"
-import type { MicroserviceNode, ServiceConnection } from "@/lib/file-analyzer"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { Download, Upload, RotateCcw } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PrettyGraph } from "@/components/pretty-graph"
+import { loadGraphFromFile, mapAiGraphToUiFormat } from "@/lib/graph-mapper"
+import type { MicroserviceNode, ServiceConnection } from "@/lib/file-analyzer"
+import { 
+  Database, 
+  Zap, 
+  Cloud, 
+  MessageSquare, 
+  Globe, 
+  Workflow,
+  Download,
+  RotateCcw
+} from "lucide-react"
+
+// Available AWS service types for quick add
+const AWS_SERVICES = [
+  { type: "Lambda", icon: Zap, color: "bg-orange-500", label: "Lambda Function" },
+  { type: "Table", icon: Database, color: "bg-blue-500", label: "DynamoDB Table" },
+  { type: "Queue", icon: MessageSquare, color: "bg-purple-500", label: "SQS Queue" },
+  { type: "Topic", icon: MessageSquare, color: "bg-pink-500", label: "SNS Topic" },
+  { type: "ApiGateway", icon: Globe, color: "bg-green-500", label: "API Gateway" },
+  { type: "StepFn", icon: Workflow, color: "bg-indigo-500", label: "Step Functions" },
+]
 
 export default function HomePage() {
   const [services, setServices] = useState<MicroserviceNode[]>([])
   const [connections, setConnections] = useState<ServiceConnection[]>([])
-  const [analysisComplete, setAnalysisComplete] = useState(false)
   const [selectedNode, setSelectedNode] = useState<MicroserviceNode | null>(null)
-  const [activeTab, setActiveTab] = useState("connections")
-
-  const handleAnalysisComplete = (newServices: MicroserviceNode[], newConnections: ServiceConnection[]) => {
-    setServices(newServices)
-    setConnections(newConnections)
-    setAnalysisComplete(true)
-  }
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
     setSelectedNode(node)
   }
 
-  const handleServicesChange = (newServices: MicroserviceNode[]) => {
-    setServices(newServices)
-  }
-
-  const handleConnectionsChange = (newConnections: ServiceConnection[]) => {
-    setConnections(newConnections)
-  }
-
-  const exportConfiguration = () => {
-    const config = {
-      services,
-      connections,
-      timestamp: new Date().toISOString(),
+  const loadAiGraph = async () => {
+    try {
+      const aiGraph = await loadGraphFromFile('/graph_v4_final.json')
+      const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(aiGraph)
+      setServices(mappedServices)
+      setConnections(mappedConnections)
+    } catch (error) {
+      console.error('Failed to load AI graph:', error)
     }
+  }
 
-    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" })
+  const addService = (serviceType: string) => {
+    const newService: MicroserviceNode = {
+      id: `${serviceType}-${Date.now()}`,
+      name: `New ${serviceType}`,
+      type: serviceType === "Lambda" ? "api" : 
+            serviceType === "Table" ? "database" : 
+            serviceType === "Queue" || serviceType === "Topic" ? "queue" : 
+            serviceType === "ApiGateway" ? "api" : "external",
+      path: `/services/${serviceType.toLowerCase()}`,
+      dependencies: [],
+      technologies: [serviceType],
+      description: `AWS ${serviceType} service`
+    }
+    setServices(prev => [...prev, newService])
+  }
+
+  const exportGraph = () => {
+    const data = { services, connections, timestamp: new Date().toISOString() }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "microservices-architecture.json"
+    a.download = "architecture-graph.json"
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
 
-  const importConfiguration = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        try {
-          const config = JSON.parse(e.target?.result as string)
-          if (config.services && config.connections) {
-            setServices(config.services)
-            setConnections(config.connections)
-            setAnalysisComplete(true)
-          }
-        } catch (error) {
-          console.error("Failed to import configuration:", error)
-        }
-      }
-      reader.readAsText(file)
-    }
-  }
-
-  const resetArchitecture = () => {
+  const clearGraph = () => {
     setServices([])
     setConnections([])
-    setAnalysisComplete(false)
     setSelectedNode(null)
   }
 
   return (
-    <div className="min-h-screen bg-background grid-bg">
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto space-y-8">
-          <div className="text-center space-y-4">
-            <h1 className="text-4xl font-bold text-balance">Microservices Architecture Visualizer</h1>
-            <p className="text-xl text-muted-foreground text-pretty">
-              Analyze, visualize, and manage your microservices architecture with interactive tools
-            </p>
+    <div className="h-screen bg-background flex">
+      {/* Left Sidebar - Palette */}
+      <div className="w-80 border-r bg-card p-4 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold mb-4">AWS Services</h2>
+          <div className="space-y-2">
+            {AWS_SERVICES.map((service) => (
+              <Button
+                key={service.type}
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => addService(service.type)}
+              >
+                <service.icon className={`h-4 w-4 mr-2 text-white rounded p-0.5 ${service.color}`} />
+                {service.label}
+              </Button>
+            ))}
           </div>
+        </div>
 
-          {!analysisComplete ? (
-            <FileUpload onAnalysisComplete={handleAnalysisComplete} />
+        {/* Actions */}
+        <div className="space-y-2 pt-4 border-t">
+          <Button onClick={loadAiGraph} className="w-full" variant="default">
+            <Zap className="h-4 w-4 mr-2" />
+            Load Sample Graph
+          </Button>
+          
+          <Button onClick={exportGraph} variant="outline" className="w-full">
+            Export JSON
+          </Button>
+          
+          <Button onClick={clearGraph} variant="outline" className="w-full">
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Clear All
+          </Button>
+        </div>
+
+        {/* Selected Node Info */}
+        {selectedNode && (
+          <div className="text-sm text-muted-foreground">
+            <div className="font-medium text-foreground">Selected</div>
+            <div className="mt-1">Name: {selectedNode.name}</div>
+            <div>Type: {selectedNode.technologies?.[0] || selectedNode.type}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Graph Area */}
+      <div className="flex-1 flex flex-col">
+        <div className="border-b bg-card px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-semibold">Architecture Graph</h1>
+              <p className="text-sm text-muted-foreground">
+                {services.length} services, {connections.length} connections
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1">
+          {services.length > 0 ? (
+            <PrettyGraph 
+              services={services} 
+              connections={connections} 
+              onNodeSelect={handleNodeSelect}
+            />
           ) : (
-            <div className="space-y-6">
-              {/* Header with Actions */}
-              <div className="flex items-center justify-between">
+            <div className="h-full flex items-center justify-center text-center">
+              <div className="space-y-4">
+                <Cloud className="h-16 w-16 mx-auto text-muted-foreground" />
                 <div>
-                  <h2 className="text-2xl font-semibold mb-2">Architecture Dashboard</h2>
-                  <p className="text-muted-foreground">Manage and monitor your microservices ecosystem</p>
-                </div>
-
-                <div className="flex gap-2">
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={importConfiguration}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <Button variant="outline" size="sm">
-                      <Upload className="h-4 w-4 mr-2" />
-                      Import
-                    </Button>
-                  </div>
-                  <Button onClick={exportConfiguration} variant="outline" size="sm">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
-                  </Button>
-                  <Button onClick={resetArchitecture} variant="outline" size="sm">
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Reset
-                  </Button>
-                </div>
-              </div>
-
-              {/* Architecture Stats */}
-              <ArchitectureStats services={services} connections={connections} />
-
-              {/* Main Content Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                {/* Graph Visualization */}
-                <div className="lg:col-span-3 space-y-6">
-                  <ServiceGraph services={services} connections={connections} onNodeSelect={handleNodeSelect} />
-
-                  {/* Health Monitor */}
-                  <ServiceHealthMonitor services={services} />
-                </div>
-
-                {/* Sidebar */}
-                <div className="lg:col-span-2 space-y-6">
-                  {/* Service Details */}
-                  <ServiceDetails selectedNode={selectedNode} connections={connections} />
-
-                  {/* Quick Actions */}
-                  <QuickActions
-                    services={services}
-                    connections={connections}
-                    onAddService={() => setActiveTab("services")}
-                    onAddConnection={() => setActiveTab("connections")}
-                    onGenerateCode={() => setActiveTab("generate")}
-                    onExportConfig={exportConfiguration}
-                    onImportConfig={() => document.querySelector('input[type="file"]')?.click()}
-                    onViewDocs={() => setActiveTab("generate")}
-                  />
-
-                  {/* Editor Tabs */}
-                  <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
-                      <TabsTrigger value="connections">Connections</TabsTrigger>
-                      <TabsTrigger value="services">Services</TabsTrigger>
-                      <TabsTrigger value="generate">Generate</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="connections" className="mt-4">
-                      <ConnectionEditor
-                        services={services}
-                        connections={connections}
-                        onConnectionsChange={handleConnectionsChange}
-                      />
-                    </TabsContent>
-
-                    <TabsContent value="services" className="mt-4">
-                      <ServiceEditor
-                        services={services}
-                        onServicesChange={handleServicesChange}
-                        selectedService={selectedNode}
-                      />
-                    </TabsContent>
-
-                    <TabsContent value="generate" className="mt-4">
-                      <CodeGeneratorPanel services={services} connections={connections} />
-                    </TabsContent>
-                  </Tabs>
+                  <h3 className="text-lg font-medium">Start Building Your Architecture</h3>
+                  <p className="text-muted-foreground">
+                    Add AWS services from the sidebar or load the sample graph
+                  </p>
                 </div>
               </div>
             </div>

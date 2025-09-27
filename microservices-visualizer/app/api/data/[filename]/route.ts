@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getData, postData, updateData, deleteData, validateDataItem } from '@/api/data';
+import { getData, postData, updateData, deleteData, validateDataItem } from '@/lib/data';
 
 // GET /api/data/[filename] - Read data from JSON file
 export async function GET(request: NextRequest, { params }: { params: Promise<{ filename: string }> }) {
@@ -35,10 +35,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // POST /api/data/[filename] - Write data to JSON file
 export async function POST(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
   try {
-    const { filename } = params;
+    const { filename } = await params;
     
     if (!filename) {
       return NextResponse.json(
@@ -77,10 +77,10 @@ export async function POST(
 // PUT /api/data/[filename] - Update existing data
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
   try {
-    const { filename } = params;
+    const { filename } = await params;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     
@@ -128,10 +128,10 @@ export async function PUT(
 // DELETE /api/data/[filename] - Delete data from JSON file
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
   try {
-    const { filename } = params;
+    const { filename } = await params;
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     
