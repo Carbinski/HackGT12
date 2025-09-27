@@ -15,7 +15,8 @@ import {
   Globe, 
   Workflow,
   Download,
-  RotateCcw
+  RotateCcw,
+  Play
 } from "lucide-react"
 
 // Available AWS service types for quick add
@@ -32,6 +33,7 @@ export default function HomePage() {
   const [services, setServices] = useState<MicroserviceNode[]>([])
   const [connections, setConnections] = useState<ServiceConnection[]>([])
   const [selectedNode, setSelectedNode] = useState<MicroserviceNode | null>(null)
+  const [runId, setRunId] = useState<number>(0)
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
     setSelectedNode(node)
@@ -167,6 +169,15 @@ export default function HomePage() {
                 {services.length} services, {connections.length} connections
               </p>
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setRunId((r) => r + 1)}
+                variant="default"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Run
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -176,6 +187,7 @@ export default function HomePage() {
               services={services} 
               connections={connections} 
               onNodeSelect={handleNodeSelect}
+              runId={runId}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-center">

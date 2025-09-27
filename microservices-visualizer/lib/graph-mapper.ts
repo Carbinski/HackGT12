@@ -139,9 +139,42 @@ export async function loadGraphFromFile(filePath: string): Promise<AiGraph> {
       throw new Error(`❌ Failed to load graph: ${response.status} ${response.statusText}`)
     }
     
-    const data = await response.json()
-    console.log(`✅ Graph data loaded successfully! Found ${data.nodes?.length || 0} nodes and ${data.edges?.length || 0} edges`)
-    return data
+    const rawData = await response.json()
+    console.log(`📥 Raw data loaded, checking structure...`)
+    
+    // Handle different graph file structures
+    let graphData: AiGraph
+    
+    if (rawData.nodes && rawData.edges) {
+      // Direct AiGraph format
+      graphData = rawData
+    } else if (rawData.graph?.nodes && rawData.graph?.edges) {
+      // Nested under 'graph' key (like graph_v4_final.json)
+      graphData = {
+        nodes: rawData.graph.nodes,
+        edges: rawData.graph.edges,
+        meta: rawData.meta || {}
+      }
+    } else if (rawData.result?.nodes && rawData.result?.edges) {
+      // Nested under 'result' key
+      graphData = {
+        nodes: rawData.result.nodes,
+        edges: rawData.result.edges,
+        meta: rawData.meta || {}
+      }
+    } else if (rawData.causalityGraph?.nodes && rawData.causalityGraph?.edges) {
+      // Nested under 'causalityGraph' key
+      graphData = {
+        nodes: rawData.causalityGraph.nodes,
+        edges: rawData.causalityGraph.edges,
+        meta: rawData.meta || {}
+      }
+    } else {
+      throw new Error(`❌ Invalid graph format. Expected nodes and edges arrays but found: ${Object.keys(rawData).join(', ')}`)
+    }
+    
+    console.log(`✅ Graph data loaded successfully! Found ${graphData.nodes?.length || 0} nodes and ${graphData.edges?.length || 0} edges`)
+    return graphData
   } catch (error) {
     console.error("❌ Error loading graph:", error)
     
