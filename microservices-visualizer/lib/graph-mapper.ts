@@ -57,8 +57,8 @@ export function mapAiGraphToUiFormat(aiGraph: AiGraph): {
       description: generateDescription(node)
     }
 
-    // Add type-specific properties
-    if (node.type === "Lambda" && node.props.timeoutMs) {
+    // Add type-specific properties (with null checks)
+    if (node.type === "Lambda" && node.props?.timeoutMs) {
       uiNode.description += ` (${node.props.timeoutMs}ms timeout)`
     }
     
@@ -67,7 +67,7 @@ export function mapAiGraphToUiFormat(aiGraph: AiGraph): {
       uiNode.port = 443
     }
 
-    if (node.props.retentionDays) {
+    if (node.props?.retentionDays) {
       uiNode.description += ` (${node.props.retentionDays} days retention)`
     }
 
@@ -113,8 +113,13 @@ function generateDescription(node: AiGraphNode): string {
 
   let desc = descriptions[node.type] || "AWS Service"
   
-  if (node.props.billingMode) {
+  // Add optional properties with null checks
+  if (node.props?.billingMode) {
     desc += ` (${node.props.billingMode})`
+  }
+  
+  if (node.props?.memorySize) {
+    desc += ` (${node.props.memorySize}MB)`
   }
   
   return desc

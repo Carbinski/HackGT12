@@ -1,0 +1,520 @@
+{
+  "cdkResult": {
+    "summary": {
+      "total_projects": 1,
+      "total_files": 18,
+      "languages": [
+        "typescript"
+      ],
+      "aws_services": [
+        "lambda",
+        "dynamodb",
+        "apigateway",
+        "ecs",
+        "iam",
+        "sqs"
+      ]
+    },
+    "projects": [
+      {
+        "repo_path": "multirepo",
+        "repo_name": "multirepo",
+        "has_cdk_json": true,
+        "has_package_json": true,
+        "cdk_files": [
+          {
+            "file_path": "multirepo/product-service/infra/ProductStack.ts",
+            "file_type": "code",
+            "relative_path": "product-service/infra/ProductStack.ts",
+            "size": 4202,
+            "language": "typescript"
+          },
+          {
+            "file_path": "multirepo/product-service/cdk.json",
+            "file_type": "config",
+            "relative_path": "product-service/cdk.json",
+            "size": 1319,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/product-service/package.json",
+            "file_type": "package",
+            "relative_path": "product-service/package.json",
+            "size": 814,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/infra/app.ts",
+            "file_type": "code",
+            "relative_path": "infra/app.ts",
+            "size": 1889,
+            "language": "typescript"
+          },
+          {
+            "file_path": "multirepo/api-gateway/infra/ApiGatewayStack.ts",
+            "file_type": "code",
+            "relative_path": "api-gateway/infra/ApiGatewayStack.ts",
+            "size": 3969,
+            "language": "typescript"
+          },
+          {
+            "file_path": "multirepo/api-gateway/cdk.json",
+            "file_type": "config",
+            "relative_path": "api-gateway/cdk.json",
+            "size": 1322,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/api-gateway/package.json",
+            "file_type": "package",
+            "relative_path": "api-gateway/package.json",
+            "size": 902,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/payment-service/infra/PaymentsStack.ts",
+            "file_type": "code",
+            "relative_path": "payment-service/infra/PaymentsStack.ts",
+            "size": 3319,
+            "language": "typescript"
+          },
+          {
+            "file_path": "multirepo/payment-service/cdk.json",
+            "file_type": "config",
+            "relative_path": "payment-service/cdk.json",
+            "size": 2134,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/payment-service/package.json",
+            "file_type": "package",
+            "relative_path": "payment-service/package.json",
+            "size": 650,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/order-service/infra/OrdersStack.ts",
+            "file_type": "code",
+            "relative_path": "order-service/infra/OrdersStack.ts",
+            "size": 3210,
+            "language": "typescript"
+          },
+          {
+            "file_path": "multirepo/order-service/cdk.json",
+            "file_type": "config",
+            "relative_path": "order-service/cdk.json",
+            "size": 2862,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/order-service/package.json",
+            "file_type": "package",
+            "relative_path": "order-service/package.json",
+            "size": 809,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/user-service/infra/UserStack.ts",
+            "file_type": "code",
+            "relative_path": "user-service/infra/UserStack.ts",
+            "size": 2818,
+            "language": "typescript"
+          },
+          {
+            "file_path": "multirepo/user-service/cdk.json",
+            "file_type": "config",
+            "relative_path": "user-service/cdk.json",
+            "size": 1316,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/user-service/package.json",
+            "file_type": "package",
+            "relative_path": "user-service/package.json",
+            "size": 916,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/package.json",
+            "file_type": "package",
+            "relative_path": "package.json",
+            "size": 757,
+            "language": "json"
+          },
+          {
+            "file_path": "multirepo/cdk.json",
+            "file_type": "config",
+            "relative_path": "cdk.json",
+            "size": 1310,
+            "language": "json"
+          }
+        ],
+        "stacks": [
+          "ProductStack",
+          "UserStack",
+          "OrdersStack",
+          "PaymentsStack",
+          "ApiGatewayStack",
+          "userStack",
+          "productStack",
+          "orderStack",
+          "paymentStack",
+          "apiGatewayStack"
+        ],
+        "constructs": [],
+        "aws_services": [
+          "lambda",
+          "dynamodb",
+          "apigateway",
+          "ecs",
+          "iam",
+          "sqs"
+        ],
+        "languages": [
+          "typescript"
+        ],
+        "app_command": "npx ts-node --prefer-ts-exts infra/app.ts",
+        "cdk_version": "^2.120.0"
+      }
+    ]
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "multirepo__ProductFunction",
+        "type": "Lambda",
+        "props": {
+          "timeoutMs": 30000,
+          "memorySize": 512
+        },
+        "originalId": "ProductFunction",
+        "project": "multirepo",
+        "label": "ProductFunction (multirepo)"
+      },
+      {
+        "id": "multirepo__ProductTable",
+        "type": "Table",
+        "label": "Products (multirepo)",
+        "props": {
+          "billingMode": "PAY_PER_REQUEST"
+        },
+        "originalId": "ProductTable",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ProductApi",
+        "type": "ApiGateway",
+        "label": "Product Service API (multirepo)",
+        "originalId": "ProductApi",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__UserServiceStack",
+        "type": "Lambda",
+        "label": "UserService (multirepo)",
+        "props": {},
+        "originalId": "UserServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ProductServiceStack",
+        "type": "Lambda",
+        "label": "ProductService (multirepo)",
+        "props": {},
+        "originalId": "ProductServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrderServiceStack",
+        "type": "Lambda",
+        "label": "OrderService (multirepo)",
+        "props": {},
+        "originalId": "OrderServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__PaymentServiceStack",
+        "type": "Lambda",
+        "label": "PaymentService (multirepo)",
+        "props": {},
+        "originalId": "PaymentServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ApiGatewayStack",
+        "type": "ApiGateway",
+        "label": "API Gateway (multirepo)",
+        "props": {},
+        "originalId": "ApiGatewayStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__MainApi",
+        "type": "ApiGateway",
+        "label": "E-commerce API Gateway (multirepo)",
+        "props": {},
+        "originalId": "MainApi",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__GatewayFunction",
+        "type": "Lambda",
+        "label": "GatewayFunction (multirepo)",
+        "props": {
+          "timeoutMs": 30000,
+          "memorySize": 1024
+        },
+        "originalId": "GatewayFunction",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__PaymentsFn",
+        "type": "Lambda",
+        "label": "PaymentsFn (multirepo)",
+        "props": {
+          "timeoutMs": 30000,
+          "memorySize": 256
+        },
+        "originalId": "PaymentsFn",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__PaymentsQueue",
+        "type": "Queue",
+        "label": "payments-queue (multirepo)",
+        "props": {},
+        "originalId": "PaymentsQueue",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__PaymentsDLQ",
+        "type": "Queue",
+        "label": "payments-dlq (multirepo)",
+        "props": {},
+        "originalId": "PaymentsDLQ",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrderTable",
+        "type": "Table",
+        "label": "OrderTable (multirepo)",
+        "props": {
+          "billingMode": "PAY_PER_REQUEST"
+        },
+        "originalId": "OrderTable",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrdersFn",
+        "type": "Lambda",
+        "label": "OrdersFn (multirepo)",
+        "props": {
+          "timeoutMs": 30000,
+          "memorySize": 512
+        },
+        "originalId": "OrdersFn",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrdersApi",
+        "type": "ApiGateway",
+        "label": "OrdersApi (multirepo)",
+        "props": {},
+        "originalId": "OrdersApi",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__UserFunction",
+        "type": "Lambda",
+        "label": "User Function (multirepo)",
+        "props": {
+          "timeoutMs": 30000,
+          "memorySize": 512
+        },
+        "originalId": "UserFunction",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__UserApi",
+        "type": "ApiGateway",
+        "label": "User Api (multirepo)",
+        "props": {},
+        "originalId": "UserApi",
+        "project": "multirepo"
+      }
+    ],
+    "edges": [
+      {
+        "id": "multirepo__ProductFunction-multirepo__ProductTable-write",
+        "from": "multirepo__ProductFunction",
+        "to": "multirepo__ProductTable",
+        "kind": "write",
+        "sync": true,
+        "originalFrom": "ProductFunction",
+        "originalTo": "ProductTable",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ProductFunction-multirepo__ProductTable-read",
+        "from": "multirepo__ProductFunction",
+        "to": "multirepo__ProductTable",
+        "kind": "read",
+        "sync": true,
+        "originalFrom": "ProductFunction",
+        "originalTo": "ProductTable",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ProductApi-multirepo__ProductFunction-invoke",
+        "from": "multirepo__ProductApi",
+        "to": "multirepo__ProductFunction",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "ProductApi",
+        "originalTo": "ProductFunction",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ApiGatewayStack-multirepo__UserServiceStack-invoke",
+        "from": "multirepo__ApiGatewayStack",
+        "to": "multirepo__UserServiceStack",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "ApiGatewayStack",
+        "originalTo": "UserServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ApiGatewayStack-multirepo__ProductServiceStack-invoke",
+        "from": "multirepo__ApiGatewayStack",
+        "to": "multirepo__ProductServiceStack",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "ApiGatewayStack",
+        "originalTo": "ProductServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__ApiGatewayStack-multirepo__OrderServiceStack-invoke",
+        "from": "multirepo__ApiGatewayStack",
+        "to": "multirepo__OrderServiceStack",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "ApiGatewayStack",
+        "originalTo": "OrderServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrderServiceStack-multirepo__UserServiceStack-invoke",
+        "from": "multirepo__OrderServiceStack",
+        "to": "multirepo__UserServiceStack",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "OrderServiceStack",
+        "originalTo": "UserServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrderServiceStack-multirepo__ProductServiceStack-invoke",
+        "from": "multirepo__OrderServiceStack",
+        "to": "multirepo__ProductServiceStack",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "OrderServiceStack",
+        "originalTo": "ProductServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__PaymentServiceStack-multirepo__OrderServiceStack-invoke",
+        "from": "multirepo__PaymentServiceStack",
+        "to": "multirepo__OrderServiceStack",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "PaymentServiceStack",
+        "originalTo": "OrderServiceStack",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__MainApi-multirepo__GatewayFunction-invoke",
+        "from": "multirepo__MainApi",
+        "to": "multirepo__GatewayFunction",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "MainApi",
+        "originalTo": "GatewayFunction",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__PaymentsFn-multirepo__PaymentsQueue-read",
+        "from": "multirepo__PaymentsFn",
+        "to": "multirepo__PaymentsQueue",
+        "kind": "read",
+        "sync": true,
+        "originalFrom": "PaymentsFn",
+        "originalTo": "PaymentsQueue",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__PaymentsQueue-multirepo__PaymentsFn-trigger",
+        "from": "multirepo__PaymentsQueue",
+        "to": "multirepo__PaymentsFn",
+        "kind": "trigger",
+        "sync": true,
+        "originalFrom": "PaymentsQueue",
+        "originalTo": "PaymentsFn",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrdersFn-multirepo__OrderTable-read",
+        "from": "multirepo__OrdersFn",
+        "to": "multirepo__OrderTable",
+        "kind": "read",
+        "sync": true,
+        "originalFrom": "OrdersFn",
+        "originalTo": "OrderTable",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrdersFn-multirepo__OrderTable-write",
+        "from": "multirepo__OrdersFn",
+        "to": "multirepo__OrderTable",
+        "kind": "write",
+        "sync": true,
+        "originalFrom": "OrdersFn",
+        "originalTo": "OrderTable",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__OrdersApi-multirepo__OrdersFn-invoke",
+        "from": "multirepo__OrdersApi",
+        "to": "multirepo__OrdersFn",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "OrdersApi",
+        "originalTo": "OrdersFn",
+        "project": "multirepo"
+      },
+      {
+        "id": "multirepo__UserApi-multirepo__UserFunction-invoke",
+        "from": "multirepo__UserApi",
+        "to": "multirepo__UserFunction",
+        "kind": "invoke",
+        "sync": true,
+        "originalFrom": "UserApi",
+        "originalTo": "UserFunction",
+        "project": "multirepo"
+      }
+    ],
+    "meta": {
+      "source": "cdk_causality_analysis",
+      "projects": [
+        "multirepo"
+      ],
+      "total_projects": 1,
+      "generated_at": "2025-09-27T12:39:55.900Z",
+      "ai_analyzed_files": 6
+    }
+  },
+  "cached": false,
+  "timestamp": "2025-09-27T12:39:55.901Z"
+}

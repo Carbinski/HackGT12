@@ -58,11 +58,18 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
     const width = 800
     const height = 600
 
-    // Setup zoom
+    // Setup zoom with throttling for better performance
     const zoomBehavior = zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 3])
+      .scaleExtent([0.3, 2])  // Reduced range for stability
+      .filter((event) => {
+        // Prevent zoom on drag operations
+        return !event.ctrlKey && !event.button
+      })
       .on("zoom", (event) => {
-        container.attr("transform", event.transform)
+        // Throttle zoom updates for better performance
+        requestAnimationFrame(() => {
+          container.attr("transform", event.transform)
+        })
       })
 
     svg.call(zoomBehavior)
@@ -71,66 +78,123 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
 
     // Create graph data
     const nodes: GraphNode[] = services.map(s => ({ ...s }))
-    const links: GraphLink[] = connections.map(c => ({
-      ...c,
-      source: nodes.find(n => n.id === c.from)!,
-      target: nodes.find(n => n.id === c.to)!
-    })).filter(l => l.source && l.target)
-
-    // Initial positioning - simple layered approach
-    const initializePositions = (nodes: GraphNode[]) => {
-      const layers: Record<string, number> = {
-        api: 0.2,      // API Gateway at top
-        frontend: 0.3, // Frontend services
-        external: 0.4, // External/Step functions
-        stepfn: 0.4,   
-        queue: 0.6,    // Queues in middle-bottom
-        message: 0.6,  // SNS Topics
-        cache: 0.6,    
-        database: 0.8  // Databases at bottom
+    
+    console.log('🔗 UI Graph Data Debug:')
+    console.log('   Available nodes:', nodes.map(n => ({ id: n.id, name: n.name })))
+    console.log('   Connection requests:', connections.map(c => ({ from: c.from, to: c.to, type: c.type })))
+    
+    const links: GraphLink[] = connections.map(c => {
+      const source = nodes.find(n => n.id === c.from)
+      const target = nodes.find(n => n.id === c.to)
+      
+      if (!source) {
+        console.warn(`❌ UI: Could not find source node for edge: ${c.from} → ${c.to}`)
+        console.warn(`   Available node IDs:`, nodes.map(n => n.id))
+      }
+      if (!target) {
+        console.warn(`❌ UI: Could not find target node for edge: ${c.from} → ${c.to}`)
+        console.warn(`   Available node IDs:`, nodes.map(n => n.id))
       }
       
+      return {
+        ...c,
+        source: source!,
+        target: target!
+      }
+    }).filter(l => {
+      const isValid = l.source && l.target
+      if (!isValid) {
+        console.warn(`🚫 UI: Dropping broken link: ${l.from} → ${l.to} (missing endpoints)`)
+      } else {
+        console.log(`✅ UI: Valid link: ${l.source.name} → ${l.target.name} (${l.type})`)
+      }
+      return isValid
+    })
+    
+    console.log(`📊 UI Graph Summary: ${nodes.length} nodes, ${links.length}/${connections.length} valid links`)
+
+    // Hierarchical positioning - logical flow from top to bottom
+    const initializePositions = (nodes: GraphNode[]) => {
+      // Define clear layers for logical flow
+      const layers: Record<string, number> = {
+        api: 0.15,     // API Gateway at very top
+        external: 0.35, // Lambda functions in upper middle  
+        queue: 0.55,   // Queues/messaging in middle
+        message: 0.55, // SNS Topics with queues
+        cache: 0.75,   // Cache in lower middle
+        database: 0.85 // Databases at bottom
+      }
+      
+      // Group nodes by type for organized layout
       const servicesByType: Record<string, GraphNode[]> = {}
       nodes.forEach(node => {
-        if (!servicesByType[node.type]) servicesByType[node.type] = []
-        servicesByType[node.type].push(node)
+        // Map Lambda technology to external type for better grouping
+        const nodeType = (node.technologies?.includes('Lambda')) ? 'external' : node.type
+        if (!servicesByType[nodeType]) servicesByType[nodeType] = []
+        servicesByType[nodeType].push(node)
       })
       
+      // Position each type in its layer with generous spacing
       Object.entries(servicesByType).forEach(([type, typeNodes]) => {
         const y = (layers[type] || 0.5) * height
-        const spacing = width / (typeNodes.length + 1)
+        const minSpacing = 180  // Increased minimum spacing
+        const spacing = Math.max(minSpacing, (width * 0.8) / Math.max(1, typeNodes.length - 1))
+        const totalWidth = typeNodes.length > 1 ? spacing * (typeNodes.length - 1) : 0
+        const startX = (width - totalWidth) / 2
         
         typeNodes.forEach((node, i) => {
-          node.x = spacing * (i + 1)
+          node.x = typeNodes.length === 1 ? width / 2 : startX + spacing * i
           node.y = y
+          // Lock initial positions to prevent chaos
+          node.fx = node.x
+          node.fy = node.y
         })
       })
+      
+      // Release fixed positions after a short delay to allow gentle settling
+      setTimeout(() => {
+        nodes.forEach(node => {
+          node.fx = null
+          node.fy = null
+        })
+      }, 1000)
     }
     
     initializePositions(nodes)
 
-    // Create simulation
+    // Create gentle simulation that maintains hierarchical layout
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(150))
-      .force("charge", d3.forceManyBody().strength(-300))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(55))
+      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(150).strength(0.3))  // Gentler links
+      .force("charge", d3.forceManyBody().strength(-100))  // Reduced repulsion for stability
+      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.1))  // Weak centering
+      .force("collision", d3.forceCollide().radius(90))  // Prevent overlap
+      .force("y", d3.forceY().y(d => {  // Keep nodes in their layers
+        const nodeType = (d.technologies?.includes('Lambda')) ? 'external' : d.type
+        const layers: Record<string, number> = {
+          api: 0.15, external: 0.35, queue: 0.55, message: 0.55, cache: 0.75, database: 0.85
+        }
+        return (layers[nodeType] || 0.5) * height
+      }).strength(0.8))
+      .alpha(0.2)  // Lower starting energy
+      .alphaDecay(0.02)  // Slower decay for gentle settling
 
     simulationRef.current = simulation
 
-    // Arrow markers
+    // Improved arrow markers for better visibility
     const defs = container.append("defs")
     defs.append("marker")
       .attr("id", "arrowhead")
       .attr("viewBox", "0 -5 10 10")
-      .attr("refX", 30)
+      .attr("refX", 35)  // Position arrow at edge of node
       .attr("refY", 0)
-      .attr("markerWidth", 6)
-      .attr("markerHeight", 6)
+      .attr("markerWidth", 8)  // Slightly larger
+      .attr("markerHeight", 8)
       .attr("orient", "auto")
       .append("path")
-      .attr("d", "M0,-5L10,0L0,5")
-      .attr("fill", "#64748b")
+      .attr("d", "M0,-4L8,0L0,4L2,0Z")  // Better arrow shape
+      .attr("fill", "#475569")
+      .attr("stroke", "#475569")
+      .attr("stroke-width", 1)
 
     // Create links
     const link = container.append("g")
@@ -258,8 +322,10 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
       link.attr("stroke", "#64748b").attr("stroke-width", 2)
     })
 
-    // Update positions on tick
+    // Simplified auto-fit with reduced complexity
+    let autoFitApplied = false
     simulation.on("tick", () => {
+      // Update positions
       link
         .attr("x1", d => d.source.x!)
         .attr("y1", d => d.source.y!)
@@ -267,24 +333,28 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
         .attr("y2", d => d.target.y!)
 
       node.attr("transform", d => `translate(${d.x},${d.y})`)
-    })
-
-    // Auto-fit after simulation ends
-    simulation.on("end", () => {
-      setTimeout(() => {
-        const bounds = container.node()?.getBBox()
-        if (bounds) {
-          const fullWidth = bounds.width
-          const fullHeight = bounds.height
-          const scale = Math.min(width / fullWidth, height / fullHeight) * 0.8
-          const translateX = (width - fullWidth * scale) / 2 - bounds.x * scale
-          const translateY = (height - fullHeight * scale) / 2 - bounds.y * scale
-          
-          svg.transition()
-            .duration(750)
-            .call(zoomBehavior.transform, zoomIdentity.translate(translateX, translateY).scale(scale))
-        }
-      }, 100)
+      
+      // Apply auto-fit once when simulation has mostly settled
+      if (!autoFitApplied && simulation.alpha() < 0.1) {
+        autoFitApplied = true
+        setTimeout(() => {
+          try {
+            const bounds = container.node()?.getBBox()
+            if (bounds && bounds.width > 0 && bounds.height > 0) {
+              const scale = Math.min(width / bounds.width, height / bounds.height) * 0.7
+              const clampedScale = Math.max(0.3, Math.min(1.5, scale))  // Clamp scale
+              const translateX = (width - bounds.width * clampedScale) / 2 - bounds.x * clampedScale
+              const translateY = (height - bounds.height * clampedScale) / 2 - bounds.y * clampedScale
+              
+              svg.transition()
+                .duration(500)  // Shorter transition
+                .call(zoomBehavior.transform, zoomIdentity.translate(translateX, translateY).scale(clampedScale))
+            }
+          } catch (e) {
+            console.warn('Auto-fit failed:', e)
+          }
+        }, 50)
+      }
     })
 
     return () => {

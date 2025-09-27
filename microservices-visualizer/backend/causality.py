@@ -100,6 +100,12 @@ CRITICAL: Respond with ONLY valid JSON. No explanations, no markdown, no text - 
 
 VERIFY edge directions. Output ONLY JSON."""
 
+    # Log the complete prompt being sent to AI
+    print(f"🐍 [CAUSALITY] AI REQUEST - COMPLETE PROMPT:")
+    print("=" * 80)
+    print(prompt)
+    print("=" * 80)
+    
     # Prepare the API request (using o1-mini reasoning model)
     data = {
         "model": "o1-mini",
@@ -108,6 +114,11 @@ VERIFY edge directions. Output ONLY JSON."""
         ],
         "max_completion_tokens": 4000
     }
+    
+    print(f"🐍 [CAUSALITY] API Request details:")
+    print(f"   - Model: {data['model']}")
+    print(f"   - Max tokens: {data['max_completion_tokens']}")
+    print(f"   - Prompt length: {len(prompt)} characters")
     
     # Make the API request
     req = urllib.request.Request(
@@ -122,7 +133,19 @@ VERIFY edge directions. Output ONLY JSON."""
     try:
         with urllib.request.urlopen(req) as response:
             result = json.loads(response.read().decode())
+            
+            # Log the complete API response
+            print(f"🐍 [CAUSALITY] RAW API RESPONSE:")
+            print("=" * 80)
+            print(json.dumps(result, indent=2))
+            print("=" * 80)
+            
             content = result["choices"][0]["message"]["content"].strip()
+            
+            print(f"🐍 [CAUSALITY] AI RESPONSE CONTENT (before cleanup):")
+            print("=" * 80)
+            print(content)
+            print("=" * 80)
             
             # Extract JSON from the response (in case there's extra text)
             if content.startswith("```json"):
@@ -131,11 +154,20 @@ VERIFY edge directions. Output ONLY JSON."""
                 content = content[:-3]
             content = content.strip()
             
+            print(f"🐍 [CAUSALITY] AI RESPONSE CONTENT (after cleanup):")
+            print("=" * 80)
+            print(content)
+            print("=" * 80)
+            
             # Debug: print the actual content if JSON parsing fails
             try:
-                return json.loads(content)
+                parsed_json = json.loads(content)
+                print(f"🐍 [CAUSALITY] Successfully parsed JSON with {len(parsed_json.get('nodes', []))} nodes and {len(parsed_json.get('edges', []))} edges")
+                return parsed_json
             except json.JSONDecodeError as json_err:
-                print(f"AI Response was: {content[:500]}...")
+                print(f"🐍 [CAUSALITY] JSON PARSING FAILED!")
+                print(f"🐍 [CAUSALITY] Error: {json_err}")
+                print(f"🐍 [CAUSALITY] Content that failed to parse: {content[:1000]}...")
                 raise RuntimeError(f"AI returned invalid JSON: {json_err}")
             
     except urllib.error.HTTPError as e:
@@ -149,20 +181,46 @@ def main() -> None:
     args = parse_args()
     input_path = Path(args.in_path)
     
-    print(f"Processing file: {input_path}")
+    print(f"🐍 [CAUSALITY] Processing file: {input_path}")
+    print(f"🐍 [CAUSALITY] Output path: {args.out_path}")
+    print(f"🐍 [CAUSALITY] OpenAI key provided: {'Yes' if args.openai_key else 'No'}")
+    print(f"🐍 [CAUSALITY] OpenAI key length: {len(args.openai_key) if args.openai_key else 0}")
     
     # Load file content and parse with AI
+    print(f"🐍 [CAUSALITY] Loading file content...")
     file_content = load_file(str(input_path))
-    graph = ai_parse_file(file_content, str(input_path), args.openai_key)
+    print(f"🐍 [CAUSALITY] File content length: {len(file_content)} characters")
+    print(f"🐍 [CAUSALITY] File content preview: {file_content[:200]}...")
+    
+    print(f"🐍 [CAUSALITY] Starting AI analysis...")
+    try:
+        graph = ai_parse_file(file_content, str(input_path), args.openai_key)
+        print(f"🐍 [CAUSALITY] AI analysis completed successfully")
+        print(f"🐍 [CAUSALITY] Generated graph: {len(graph.get('nodes', []))} nodes, {len(graph.get('edges', []))} edges")
+        
+        # Log the complete AI output
+        print(f"🐍 [CAUSALITY] COMPLETE AI OUTPUT:")
+        print("=" * 80)
+        print(json.dumps(graph, indent=2))
+        print("=" * 80)
+        
+    except Exception as e:
+        print(f"🐍 [CAUSALITY] AI analysis failed: {e}")
+        import traceback
+        print(f"🐍 [CAUSALITY] Full error traceback:")
+        traceback.print_exc()
+        raise
     
     # Write output
     out_path = Path(args.out_path).expanduser()
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    print(f"🐍 [CAUSALITY] Writing output to: {out_path}")
     with out_path.open("w", encoding="utf-8") as handle:
         json.dump(graph, handle, indent=2)
     
-    print(f"Graph written to: {out_path}")
-    print(f"Found {len(graph['nodes'])} nodes and {len(graph['edges'])} edges")
+    print(f"🐍 [CAUSALITY] ✅ Success! Graph written to: {out_path}")
+    print(f"🐍 [CAUSALITY] Found {len(graph['nodes'])} nodes and {len(graph['edges'])} edges")
 
 
 if __name__ == "__main__":
