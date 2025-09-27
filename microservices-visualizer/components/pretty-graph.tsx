@@ -20,6 +20,7 @@ interface PrettyGraphProps {
   services: MicroserviceNode[]
   connections: ServiceConnection[]
   onNodeSelect?: (node: MicroserviceNode | null) => void
+  focusNodeId?: string | null
 }
 
 // Service type colors based on AWS architecture patterns
@@ -140,12 +141,14 @@ function getServiceType(node: MicroserviceNode): string {
   return "compute" // Default to compute layer
 }
 
-export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraphProps) {
+export function PrettyGraph({ services, connections, onNodeSelect, focusNodeId }: PrettyGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
+  const [helpOpen, setHelpOpen] = useState(true)
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null)
   const zoomBehaviorRef = useRef<any>(null)
   const containerRef = useRef<SVGGElement | null>(null)
+  const userZoomedRef = useRef<boolean>(false)
   const selectedNodeRef = useRef<string | null>(null)
 
   // Keep ref in sync without reinitializing the graph
@@ -175,6 +178,10 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
         requestAnimationFrame(() => {
           container.attr("transform", event.transform)
         })
+        // Mark that the user has interacted (ignore programmatic transforms)
+        if ((event as any)?.sourceEvent?.isTrusted) {
+          userZoomedRef.current = true
+        }
       })
 
     svg.call(zoomBehavior)
@@ -231,110 +238,55 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
       nodeConnectivity.set(node.id, connectionCount)
     })
 
-    // Hierarchical positioning - logical architectural layers from top to bottom
+    // Grid positioning for readability: align to a neat grid, by type rows
     const initializePositions = (nodes: GraphNode[]) => {
-      // Define architectural layers following data flow patterns
-      const layers: Record<string, number> = {
-        api: 0.08,        // API Layer - Entry points (API Gateway, ALB)
-        security: 0.15,   // Security Layer - Auth, IAM (close to API)
-        compute: 0.25,    // Compute Layer - Business logic (Lambda, EC2)
-        stepfn: 0.35,     // Orchestration Layer - Workflow management
-        queue: 0.50,      // Event/Message Layer - Async communication
-        message: 0.50,    // Message Layer - Same level as queues
-        cache: 0.65,      // Cache Layer - Performance optimization
-        storage: 0.75,    // Storage Layer - File storage
-        database: 0.85,   // Data Layer - Persistent data
-        monitoring: 0.95, // Observability Layer - Monitoring at bottom
-        external: 0.40    // External services - Mid-level integration
-      }
-      
-      // Group nodes by their determined architectural type
-      const servicesByType: Record<string, GraphNode[]> = {}
-      nodes.forEach(node => {
-        const nodeType = getServiceType(node)
-        if (!servicesByType[nodeType]) servicesByType[nodeType] = []
-        servicesByType[nodeType].push(node)
+      const gridCellW = 220
+      const gridCellH = 140
+      const marginX = 80
+      const marginY = 80
+
+      // Order of rows (top to bottom)
+      const rowOrder = [
+        "api","security","compute","stepfn","queue","message","cache","storage","database","monitoring","external"
+      ]
+
+      // Group by type
+      const byType: Record<string, GraphNode[]> = {}
+      nodes.forEach(n => {
+        const t = getServiceType(n)
+        if (!byType[t]) byType[t] = []
+        byType[t].push(n)
       })
-      
-      // Position each type in its layer with intelligent spacing based on connectivity
-      Object.entries(servicesByType).forEach(([type, typeNodes]) => {
-        const y = (layers[type] || 0.5) * height
-        
-        // Sort nodes by connectivity (most connected in center for better line distribution)
-        const sortedNodes = typeNodes.sort((a, b) => {
-          const aConnections = nodeConnectivity.get(a.id) || 0
-          const bConnections = nodeConnectivity.get(b.id) || 0
-          return bConnections - aConnections // Descending order
-        })
-        
-        // Calculate dynamic spacing based on connectivity
-        const baseSpacing = 180
-        const maxConnections = Math.max(...Array.from(nodeConnectivity.values()))
-        
-        let totalWidth = 0
-        const nodePositions: number[] = []
-        
-        sortedNodes.forEach((node, i) => {
-          const connections = nodeConnectivity.get(node.id) || 0
-          // Highly connected nodes get more space around them
-          const connectionMultiplier = 1 + (connections / maxConnections) * 0.8
-          const nodeSpacing = baseSpacing * connectionMultiplier
-          
-          if (i === 0) {
-            nodePositions.push(0)
-          } else {
-            nodePositions.push(nodePositions[i - 1] + nodeSpacing)
-            totalWidth = nodePositions[i]
-          }
-        })
-        
-        // Center the entire group
-        const startX = (width - totalWidth) / 2
-        
-        sortedNodes.forEach((node, i) => {
-          node.x = sortedNodes.length === 1 ? width / 2 : startX + nodePositions[i]
-          node.y = y
-          // Lock initial positions to prevent chaos
-          node.fx = node.x
-          node.fy = node.y
+
+      // Assign positions in grid per row
+      rowOrder.forEach((type, rowIdx) => {
+        const arr = byType[type] || []
+        arr.forEach((n, i) => {
+          const x = marginX + i * gridCellW
+          const y = marginY + rowIdx * gridCellH
+          n.x = x
+          n.y = y
+          n.fx = x
+          n.fy = y
         })
       })
-      
-      // Release fixed positions after a short delay to allow gentle settling
-      setTimeout(() => {
-        nodes.forEach(node => {
-          node.fx = null
-          node.fy = null
-        })
-      }, 1000)
+
+      // Keep nodes locked; simulation forces will be gentle so layout stays grid-like
     }
     
     initializePositions(nodes)
 
     // Create gentle simulation that maintains hierarchical layout with intelligent spacing
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(150).strength(0.3))  // Gentler links
-      .force("charge", d3.forceManyBody().strength(-100))  // Reduced repulsion for stability
-      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.1))  // Weak centering
-      .force("collision", d3.forceCollide().radius((d: any) => {
-        // Dynamic collision radius based on connectivity
-        const connections = nodeConnectivity.get(d.id) || 0
-        const maxConnections = Math.max(...Array.from(nodeConnectivity.values()))
-        const baseRadius = 90
-        const connectivityMultiplier = 1 + (connections / maxConnections) * 0.5
-        return baseRadius * connectivityMultiplier
-      }))  // Variable collision based on connectivity
-      .force("y", d3.forceY().y(d => {  // Keep nodes in their architectural layers
-        const nodeType = getServiceType(d as GraphNode)
-        const layers: Record<string, number> = {
-          api: 0.08, security: 0.15, compute: 0.25, stepfn: 0.35, queue: 0.50, 
-          message: 0.50, cache: 0.65, storage: 0.75, database: 0.85, 
-          monitoring: 0.95, external: 0.40
-        }
-        return (layers[nodeType] || 0.5) * height
-      }).strength(1.2))
-      .alpha(0.2)  // Lower starting energy
-      .alphaDecay(0.02)  // Slower decay for gentle settling
+      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(160).strength(0.2))
+      .force("charge", d3.forceManyBody().strength(-30))
+      .force("center", d3.forceCenter(width / 2, height / 2).strength(0.05))
+      .force("collision", d3.forceCollide().radius(70))
+      // Light gravity toward grid rows to keep right angles readable
+      .force("y", d3.forceY().y((d: any) => (d.fy ?? d.y ?? 0)).strength(0.3))
+      .force("x", d3.forceX().x((d: any) => (d.fx ?? d.x ?? 0)).strength(0.3))
+      .alpha(0.15)
+      .alphaDecay(0.03)
 
     simulationRef.current = simulation
 
@@ -703,7 +655,7 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
       node.attr("transform", d => `translate(${d.x},${d.y})`)
       
       // Apply auto-fit once when simulation has mostly settled
-      if (!autoFitApplied && simulation.alpha() < 0.1) {
+      if (!autoFitApplied && !userZoomedRef.current && simulation.alpha() < 0.1) {
         autoFitApplied = true
         setTimeout(() => {
           try {
@@ -729,6 +681,27 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
       simulation.stop()
     }
   }, [services, connections, onNodeSelect])
+
+  // Focus/zoom to a specific node when requested
+  useEffect(() => {
+    if (!focusNodeId || !svgRef.current || !containerRef.current || !zoomBehaviorRef.current) return
+    try {
+      const nodeSel = select(containerRef.current)
+        .selectAll<SVGGElement, GraphNode>(".node")
+        .filter((d: any) => d.id === focusNodeId)
+      const d = nodeSel.datum() as any
+      if (!d || d.x == null || d.y == null) return
+      const svg = select(svgRef.current)
+      const width = 800
+      const height = 600
+      const scale = 1.2
+      const translateX = width / 2 - d.x * scale
+      const translateY = height / 2 - d.y * scale
+      // Mark as user intent to prevent later auto-fit
+      userZoomedRef.current = true
+      svg.transition().duration(350).call(zoomBehaviorRef.current.transform, zoomIdentity.translate(translateX, translateY).scale(scale))
+    } catch {}
+  }, [focusNodeId])
 
   if (services.length === 0) {
     return (
@@ -810,26 +783,40 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
         </Button>
       </div>
       
-      {/* Instructions */}
-      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 text-xs text-slate-600 max-w-sm">
-        <div className="font-medium mb-2">AWS Architecture Visualization</div>
-        <div className="mb-2">
-          <div className="font-medium text-[10px] mb-1">Controls:</div>
-          <div>• Click nodes to highlight connections</div>
-          <div>• Drag nodes to reposition</div>
-          <div>• Scroll to zoom, drag background to pan</div>
-        </div>
-        <div>
-          <div className="font-medium text-[10px] mb-1">Smart Layout:</div>
-          <div>• Services organized by architectural layers</div>
-          <div>• Highly connected nodes get more space</div>
-          <div>• Most connected nodes positioned centrally</div>
-        </div>
-        <div className="mt-2">
-          <div className="font-medium text-[10px] mb-1">Connections:</div>
-          <div>• Solid lines: Synchronous calls</div>
-          <div>• Dashed lines: Asynchronous events</div>
-          <div>• Colors indicate connection type</div>
+      {/* Instructions (collapsible) */}
+      <div className="absolute top-4 left-4">
+        <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border text-xs text-slate-600 max-w-sm overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2 border-b">
+            <div className="font-medium">AWS Architecture Visualization</div>
+            <button
+              className="text-slate-500 hover:text-slate-700 text-[11px]"
+              onClick={() => setHelpOpen((v) => !v)}
+            >
+              {helpOpen ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {helpOpen && (
+            <div className="p-3">
+              <div className="mb-2">
+                <div className="font-medium text-[10px] mb-1">Controls:</div>
+                <div>• Click nodes to highlight connections</div>
+                <div>• Drag nodes to reposition</div>
+                <div>• Scroll to zoom, drag background to pan</div>
+              </div>
+              <div>
+                <div className="font-medium text-[10px] mb-1">Smart Layout:</div>
+                <div>• Services organized by architectural layers</div>
+                <div>• Highly connected nodes get more space</div>
+                <div>• Most connected nodes positioned centrally</div>
+              </div>
+              <div className="mt-2">
+                <div className="font-medium text-[10px] mb-1">Connections:</div>
+                <div>• Solid lines: Synchronous calls</div>
+                <div>• Dashed lines: Asynchronous events</div>
+                <div>• Colors indicate connection type</div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

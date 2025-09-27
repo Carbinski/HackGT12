@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PrettyGraph } from "@/components/pretty-graph"
 import { FolderSelector } from "@/components/folder-selector"
+import { ServiceDetails } from "@/components/service-details"
 import { loadGraphFromFile, mapAiGraphToUiFormat } from "@/lib/graph-mapper"
 import type { MicroserviceNode, ServiceConnection } from "@/lib/file-analyzer"
 import { 
@@ -15,7 +16,9 @@ import {
   Globe, 
   Workflow,
   Download,
-  RotateCcw
+  RotateCcw,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 
 // Available AWS service types for quick add
@@ -32,6 +35,10 @@ export default function HomePage() {
   const [services, setServices] = useState<MicroserviceNode[]>([])
   const [connections, setConnections] = useState<ServiceConnection[]>([])
   const [selectedNode, setSelectedNode] = useState<MicroserviceNode | null>(null)
+  const [isConsoleOpen, setIsConsoleOpen] = useState(true)
+  const [consoleWidth, setConsoleWidth] = useState(420)
+  const resizeRef = (typeof window !== 'undefined') ? (window as any).__consoleResizeRef || { active:false, startX:0, startWidth:0 } : { active:false, startX:0, startWidth:0 }
+  if (typeof window !== 'undefined') { (window as any).__consoleResizeRef = resizeRef }
 
   const handleNodeSelect = (node: MicroserviceNode | null) => {
     setSelectedNode(node)
@@ -103,6 +110,34 @@ export default function HomePage() {
     setConnections([])
     setSelectedNode(null)
   }
+
+  // Resizer handlers
+  const onStartResize = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    resizeRef.active = true
+    resizeRef.startX = e.clientX
+    resizeRef.startWidth = consoleWidth
+  }
+
+  // Global mouse listeners for resize
+  // Attach once
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  React.useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!resizeRef.active) return
+      const dx = resizeRef.startX - e.clientX
+      // Limit sliding range tighter per request
+      const next = Math.min(700, Math.max(300, resizeRef.startWidth + dx))
+      setConsoleWidth(next)
+    }
+    const onUp = () => { resizeRef.active = false }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
 
   return (
     <div className="h-screen bg-background flex">
@@ -176,6 +211,7 @@ export default function HomePage() {
               services={services} 
               connections={connections} 
               onNodeSelect={handleNodeSelect}
+              focusNodeId={selectedNode?.id || null}
             />
           ) : (
             <div className="h-full flex items-center justify-center text-center">
@@ -191,6 +227,29 @@ export default function HomePage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Resizer + Right Console - Selected Service Details */}
+      {isConsoleOpen && (
+        <div
+          onMouseDown={onStartResize}
+          className="w-1 cursor-col-resize bg-gray-200 hover:bg-gray-300"
+          aria-hidden
+        />
+      )}
+      <div
+        className={`border-l bg-white flex flex-col transition-[width] duration-200 ${isConsoleOpen ? 'p-3' : 'p-0'}`}
+        style={{ width: isConsoleOpen ? consoleWidth : 0, overflow: 'hidden' }}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-semibold">Details</div>
+          <Button size="icon" variant="ghost" onClick={() => setIsConsoleOpen(!isConsoleOpen)} aria-label="Toggle console">
+            {isConsoleOpen ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </Button>
+        </div>
+        {isConsoleOpen && (
+          <ServiceDetails selectedNode={selectedNode} connections={connections} />
+        )}
       </div>
     </div>
   )
