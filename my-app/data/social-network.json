@@ -1,0 +1,39 @@
+[
+  {
+    "id": "user-1",
+    "name": "Alice",
+    "type": "user",
+    "connections_out": [
+      "user-2",
+      "user-3"
+    ],
+    "connections_in": [
+      "user-2"
+    ]
+  },
+  {
+    "id": "user-2",
+    "name": "Bob",
+    "type": "user",
+    "connections_out": [
+      "user-1",
+      "user-3"
+    ],
+    "connections_in": [
+      "user-1",
+      "user-3"
+    ]
+  },
+  {
+    "id": "user-3",
+    "name": "Charlie",
+    "type": "user",
+    "connections_out": [
+      "user-2"
+    ],
+    "connections_in": [
+      "user-1",
+      "user-2"
+    ]
+  }
+]
