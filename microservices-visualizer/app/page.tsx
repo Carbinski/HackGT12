@@ -38,12 +38,20 @@ export default function HomePage() {
 
   const loadAiGraph = async () => {
     try {
+      console.log('Attempting to load graph from /graph_v4_final.json...')
       const aiGraph = await loadGraphFromFile('/graph_v4_final.json')
+      console.log('Graph loaded successfully:', aiGraph)
       const { services: mappedServices, connections: mappedConnections } = mapAiGraphToUiFormat(aiGraph)
+      console.log('Mapped services:', mappedServices.length, 'connections:', mappedConnections.length)
       setServices(mappedServices)
       setConnections(mappedConnections)
     } catch (error) {
       console.error('Failed to load AI graph:', error)
+      if (error instanceof Error) {
+        alert(`❌ Failed to load graph: ${error.message}\n\nMake sure the app is running on the correct port and try refreshing the page.`)
+      } else {
+        alert('❌ Failed to load graph. Check console for details.')
+      }
     }
   }
 

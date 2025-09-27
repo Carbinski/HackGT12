@@ -121,14 +121,29 @@ function generateDescription(node: AiGraphNode): string {
 }
 
 export async function loadGraphFromFile(filePath: string): Promise<AiGraph> {
+  console.log(`🔍 Attempting to fetch graph from: ${filePath}`)
+  
   try {
     const response = await fetch(filePath)
+    console.log(`📡 Response status: ${response.status} ${response.statusText}`)
+    
     if (!response.ok) {
-      throw new Error(`Failed to load graph: ${response.statusText}`)
+      if (response.status === 404) {
+        throw new Error(`❌ Graph file not found at ${filePath}. Make sure:\n1. The file exists in the public folder\n2. The app is running on the correct port\n3. Try refreshing the page`)
+      }
+      throw new Error(`❌ Failed to load graph: ${response.status} ${response.statusText}`)
     }
-    return await response.json()
+    
+    const data = await response.json()
+    console.log(`✅ Graph data loaded successfully! Found ${data.nodes?.length || 0} nodes and ${data.edges?.length || 0} edges`)
+    return data
   } catch (error) {
-    console.error("Error loading graph:", error)
+    console.error("❌ Error loading graph:", error)
+    
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('🌐 Network error: Unable to fetch the graph file. Make sure the development server is running on http://localhost:3000')
+    }
+    
     throw error
   }
 }

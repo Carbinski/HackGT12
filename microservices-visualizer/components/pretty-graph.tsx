@@ -111,10 +111,10 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
 
     // Create simulation
     const simulation = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(140))
+      .force("link", d3.forceLink(links).id((d: any) => d.id).distance(150))
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collision", d3.forceCollide().radius(50))
+      .force("collision", d3.forceCollide().radius(55))
 
     simulationRef.current = simulation
 
@@ -123,7 +123,7 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
     defs.append("marker")
       .attr("id", "arrowhead")
       .attr("viewBox", "0 -5 10 10")
-      .attr("refX", 25)
+      .attr("refX", 30)
       .attr("refY", 0)
       .attr("markerWidth", 6)
       .attr("markerHeight", 6)
@@ -166,21 +166,46 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
         })
       )
 
-    // Node squares
+    // Node squares with AWS service icons
     node.append("rect")
-      .attr("width", 50)
-      .attr("height", 50)
-      .attr("x", -25)
-      .attr("y", -25)
+      .attr("width", 60)
+      .attr("height", 60)
+      .attr("x", -30)
+      .attr("y", -30)
       .attr("rx", 8)
-      .attr("fill", d => SERVICE_COLORS[d.type as keyof typeof SERVICE_COLORS] || "#6b7280")
-      .attr("stroke", "#ffffff")
+      .attr("fill", "#ffffff")
+      .attr("stroke", d => SERVICE_COLORS[d.type as keyof typeof SERVICE_COLORS] || "#6b7280")
       .attr("stroke-width", 3)
       .style("filter", "drop-shadow(0 4px 8px rgba(0,0,0,0.1))")
 
+    // AWS service icons
+    node.append("image")
+      .attr("x", -20)
+      .attr("y", -20)
+      .attr("width", 40)
+      .attr("height", 40)
+      .attr("href", d => {
+        // Map service types to AWS icons
+        const iconMap: Record<string, string> = {
+          "api": "/aws-icons/Arch_Amazon-API-Gateway_64.svg",
+          "database": "/aws-icons/Arch_Amazon-DynamoDB_64.svg",
+          "queue": "/aws-icons/Arch_Amazon-EventBridge_64.svg", // Using EventBridge for SQS
+          "message": "/aws-icons/Arch_Amazon-EventBridge_64.svg",
+          "stepfn": "/aws-icons/Arch_AWS-Step-Functions_64.svg",
+          "external": "/aws-icons/Arch_AWS-Lambda_64.svg", // Default to Lambda for unknown
+        }
+        
+        // Check if it's a Lambda function based on technologies
+        if (d.technologies && d.technologies.includes("Lambda")) {
+          return "/aws-icons/Arch_AWS-Lambda_64.svg"
+        }
+        
+        return iconMap[d.type] || "/aws-icons/Arch_AWS-Lambda_64.svg"
+      })
+
     // Node labels
     node.append("text")
-      .attr("dy", 45)
+      .attr("dy", 50)
       .attr("text-anchor", "middle")
       .attr("font-size", "12px")
       .attr("font-weight", "600")
@@ -189,7 +214,7 @@ export function PrettyGraph({ services, connections, onNodeSelect }: PrettyGraph
 
     // Technology labels
     node.append("text")
-      .attr("dy", 60)
+      .attr("dy", 65)
       .attr("text-anchor", "middle")
       .attr("font-size", "10px")
       .attr("fill", "#64748b")
