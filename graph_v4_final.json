@@ -1,0 +1,139 @@
+{
+  "nodes": [
+    {
+      "id": "TickTable",
+      "type": "Table",
+      "label": "TickTable",
+      "props": {
+        "billingMode": "PAY_PER_REQUEST"
+      }
+    },
+    {
+      "id": "DedupTable",
+      "type": "Table",
+      "label": "DedupTable",
+      "props": {
+        "billingMode": "PAY_PER_REQUEST",
+        "timeToLiveAttribute": "ttl"
+      }
+    },
+    {
+      "id": "FanoutLambda",
+      "type": "Lambda",
+      "label": "FanoutLambda",
+      "props": {
+        "timeoutMs": 10000,
+        "memorySize": 128
+      }
+    },
+    {
+      "id": "IngestTickFunction",
+      "type": "Lambda",
+      "label": "IngestTickFunction",
+      "props": {}
+    },
+    {
+      "id": "QueryLambda",
+      "type": "Lambda",
+      "label": "QueryLambda",
+      "props": {}
+    },
+    {
+      "id": "FanoutQueue",
+      "type": "Queue",
+      "label": "FanoutQueue",
+      "props": {
+        "retentionDays": 3,
+        "visibilityTimeout": 30
+      }
+    },
+    {
+      "id": "IngestDQL",
+      "type": "Queue",
+      "label": "IngestDQL",
+      "props": {
+        "retentionDays": 3
+      }
+    },
+    {
+      "id": "TickAPI",
+      "type": "ApiGateway",
+      "label": "TickAPI",
+      "props": {}
+    },
+    {
+      "id": "QueryRestAPI",
+      "type": "ApiGateway",
+      "label": "QueryRestAPI",
+      "props": {}
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "from": "TickTable",
+      "to": "FanoutLambda",
+      "kind": "trigger",
+      "sync": true
+    },
+    {
+      "id": "edge-2",
+      "from": "FanoutLambda",
+      "to": "DedupTable",
+      "kind": "write",
+      "sync": true
+    },
+    {
+      "id": "edge-3",
+      "from": "FanoutLambda",
+      "to": "FanoutQueue",
+      "kind": "publish",
+      "sync": true
+    },
+    {
+      "id": "edge-4",
+      "from": "IngestTickFunction",
+      "to": "TickTable",
+      "kind": "write",
+      "sync": true
+    },
+    {
+      "id": "edge-5",
+      "from": "IngestTickFunction",
+      "to": "IngestDQL",
+      "kind": "publish",
+      "sync": true
+    },
+    {
+      "id": "edge-6",
+      "from": "QueryLambda",
+      "to": "TickTable",
+      "kind": "read",
+      "sync": true
+    },
+    {
+      "id": "edge-7",
+      "from": "QueryLambda",
+      "to": "IngestDQL",
+      "kind": "publish",
+      "sync": true
+    },
+    {
+      "id": "edge-8",
+      "from": "TickAPI",
+      "to": "IngestTickFunction",
+      "kind": "invoke",
+      "sync": true
+    },
+    {
+      "id": "edge-9",
+      "from": "QueryRestAPI",
+      "to": "QueryLambda",
+      "kind": "invoke",
+      "sync": true
+    }
+  ],
+  "meta": {
+    "source": "cdk"
+  }
+}
